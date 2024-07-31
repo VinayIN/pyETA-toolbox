@@ -3,6 +3,9 @@ import PyQt6.QtCore as qtc
 import PyQt6.QtGui as qtg
 import sys
 import random
+import datetime
+import json
+import os
 
 class ValidationWindow(qtw.QMainWindow):
     def __init__(self):
@@ -13,6 +16,7 @@ class ValidationWindow(qtw.QMainWindow):
         self.movement_duration = 1000
         self.stay_duration = 2000
         self.circle_size = 20
+        self.collected_data = []
         self.initUI()
 
     def initUI(self):
@@ -65,7 +69,8 @@ class ValidationWindow(qtw.QMainWindow):
         
         self.circle.show()
         self.animation.start()
-        print(self.current_position, self.circle_positions)
+        self.collect_data()
+
         self.circle_positions.remove(self.current_position)
 
     def on_animation_finished(self):
@@ -79,8 +84,22 @@ class ValidationWindow(qtw.QMainWindow):
         else:
             super().keyPressEvent(event)
     
+    def collect_data(self):
+        circle_screen_pos = self.circle.mapToGlobal(qtc.QPoint(0, 0))
+        data_point = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "grid_position": self.current_position,
+            "screen_position": (circle_screen_pos.x(), circle_screen_pos.y())
+        }
+        self.collected_data.append(data_point)
+
     def process_data(self):
-        print("Processing data")
+        data_path = os.path.join(os.path.dirname(__package__), "data")
+        if not os.path.exists(data_path):
+            os.makedirs(data_path)
+        with open(os.path.join(data_path, f"validation_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"), "w") as f:
+            json.dump(self.collected_data, f, indent=4)
+            print("Data saved!")
 
 def run_validation_window():
     app = qtw.QApplication(sys.argv)
