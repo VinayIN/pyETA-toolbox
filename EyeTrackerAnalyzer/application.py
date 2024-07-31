@@ -30,6 +30,7 @@ app.layout = dbc.Container([
     dbc.Tabs([
         dbc.Tab(label="Gaze points", tab_id="eye-tracker-gaze"),
         dbc.Tab(label="Fixation", tab_id="eye-tracker-fixation"),
+        dbc.Tab(label="Metrics", tab_id="eye-tracker-metrics")  
     ],
     id="tabs",
     active_tab="eye-tracker-gaze"),
@@ -71,6 +72,9 @@ def render_tab_content(active_tab, data):
     elif active_tab == "eye-tracker-fixation":
         print("plotting fixation points")
         return "Fixation tab"
+    elif active_tab == "eye-tracker-metrics":
+        print("plotting metrics")
+        return "Metrics tab"
     return "No tab selected"
 
 
