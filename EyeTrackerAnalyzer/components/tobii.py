@@ -70,11 +70,12 @@ class Tobii:
         """Starts tracking for the given duration (in seconds) and saves the data to a file."""
         if self.eyetracker:
             try:
-                print("Starting tracking...")
+                print(f"Starting tracking...for {duration} seconds")
                 self.eyetracker.subscribe_to(tr.EYETRACKER_GAZE_DATA, self._append_gaze_data, as_dictionary=True)
                 end_time = datetime.datetime.now() + datetime.timedelta(seconds=duration)
                 while datetime.datetime.now() <= end_time:
                     continue
+                print("Stopping tracking...")
                 self.eyetracker.unsubscribe_from(tr.EYETRACKER_GAZE_DATA, self._append_gaze_data)
             except KeyboardInterrupt:
                 print("Stopping tracking...")
@@ -110,6 +111,6 @@ class Tobii:
 
 if __name__ == "__main__":
     tobii = Tobii(save_data=False, verbose=False)
-    tobii.start_tracking_indefinite()
-    #tobii.start_tracking(10)
+    # tobii.start_tracking_indefinite()
+    tobii.start_tracking(10)
         

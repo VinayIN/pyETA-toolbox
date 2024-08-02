@@ -6,6 +6,7 @@ import multiprocessing
 import dash
 import datetime
 from EyeTrackerAnalyzer.components.window import run_validation_window
+from EyeTrackerAnalyzer.components.tobii import Tobii
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
 
@@ -14,6 +15,7 @@ def run_async_function(async_func):
     asyncio.set_event_loop(loop)
     loop.run_until_complete(async_func())
     loop.close()
+
 
 app = dash.Dash(
     __package__,
@@ -64,8 +66,13 @@ app.layout = dbc.Container([
 def update_window(n_clicks):
     if n_clicks:
         print(f"executing: {run_validation_window.__name__}")
-        process = multiprocessing.Process(target=run_async_function, args=(run_validation_window,))
-        process.start()
+        # with multiprocessing.Pool() as pool:
+        #     validation_result = pool.apply_async(run_validation)
+        #     tobii_process = Tobii(save_data=False, verbose=True)
+        #     tobii_result = pool.apply_async(tobii_process.start_tracking_indefinite)
+
+        process_validation = multiprocessing.Process(target=run_async_function, args=(run_validation_window,))
+        process_validation.start()
     return n_clicks
 
 @app.callback(
