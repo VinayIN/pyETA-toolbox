@@ -91,7 +91,7 @@ class Tobii:
                                 "screen_size": (self.screen_width, self.screen_heigth),
                                 "data": self.gaze_data
                             }, file, indent=4)
-                    print("Data saved!")
+                    print("Gaze Data saved!")
         else:
             print("No eye tracker found!")
 

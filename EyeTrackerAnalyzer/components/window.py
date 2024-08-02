@@ -105,7 +105,7 @@ class ValidationWindow(qtw.QMainWindow):
                     "screen_size": (self.screen_width, self.screen_height),
                     "data": self.collected_data
                 }, f, indent=4)
-            print("Data saved!")
+            print("Validation Data saved!")
 
 def run_validation_window():
     app = qtw.QApplication(sys.argv)

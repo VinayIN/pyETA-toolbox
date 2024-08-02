@@ -16,6 +16,9 @@ def run_async_function(async_func):
     loop.run_until_complete(async_func())
     loop.close()
 
+def run_tobii():
+    tobii_process = Tobii(save_data=True, verbose=True)
+    tobii_process.start_tracking(duration=10)
 
 app = dash.Dash(
     __package__,
@@ -66,13 +69,12 @@ app.layout = dbc.Container([
 def update_window(n_clicks):
     if n_clicks:
         print(f"executing: {run_validation_window.__name__}")
-        # with multiprocessing.Pool() as pool:
-        #     validation_result = pool.apply_async(run_validation)
-        #     tobii_process = Tobii(save_data=False, verbose=True)
-        #     tobii_result = pool.apply_async(tobii_process.start_tracking_indefinite)
-
-        process_validation = multiprocessing.Process(target=run_async_function, args=(run_validation_window,))
-        process_validation.start()
+        with multiprocessing.Pool(processes=2) as pool:
+            tobii_result = pool.apply_async(run_tobii)
+            validation_result = pool.apply_async(run_validation_window)
+            tobii_result.get()
+            validation_result.get()
+        print("validation window closed")
     return n_clicks
 
 @app.callback(
