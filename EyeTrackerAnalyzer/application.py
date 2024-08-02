@@ -15,7 +15,10 @@ def run_async_function(async_func):
     loop.run_until_complete(async_func())
     loop.close()
 
-app = dash.Dash(__package__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(
+    __package__,
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    suppress_callback_exceptions=True)
 
 app.layout = dbc.Container([
     dbc.Row(dash.html.H1("Eye Tracker Analyzer")),
