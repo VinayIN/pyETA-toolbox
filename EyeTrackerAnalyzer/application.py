@@ -1,7 +1,10 @@
 import sys
+import os
+import re
 import asyncio
 import multiprocessing
 import dash
+import datetime
 from EyeTrackerAnalyzer.components.window import run_validation_window
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
@@ -19,8 +22,15 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col(
             dbc.Row([
-                dbc.Col(dash.dcc.Input(id="input-box", type="text")),
-                dbc.Col(dash.html.Div(id="output-box"))
+                dash.dcc.Markdown(
+                    '''
+                    This interface allows you to validate the eye tracker accuracy along with the following:
+                    - View gaze points
+                    - View fixation points
+                    - View eye tracker accuracy
+                        * Comparing the gaze data with validation grid locations.
+                    '''
+                ),
             ])),
         dbc.Col(
             dbc.Row([
@@ -43,12 +53,6 @@ app.layout = dbc.Container([
         ),
 ])
 
-@app.callback(
-    Output('output-box', 'children'),
-    Input('input-box', 'value')
-)
-def update_output(value):
-    return f'Participant No: {value}'
 
 @app.callback(
     Output('open-grid-window', 'n_clicks'),
@@ -74,9 +78,72 @@ def render_tab_content(active_tab, data):
         return "Fixation tab"
     elif active_tab == "eye-tracker-metrics":
         print("plotting metrics")
-        return "Metrics tab"
+        return render_metrics_tab()
     return "No tab selected"
 
+def get_file_names(prefix):
+    return [f for f in os.listdir('data/') if f.startswith(prefix)]
+
+def render_metrics_tab():
+    gaze_files = get_file_names("gaze_data_")
+    validation_files = get_file_names("validation_")
+
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col(dash.dcc.Dropdown(
+                id='gaze-data-dropdown',
+                options=[{'label': f, 'value': f} for f in gaze_files],
+                placeholder="Select Gaze Data File"
+            )),
+            dbc.Col(dash.dcc.Dropdown(
+                id='validation-data-dropdown',
+                options=[{'label': f, 'value': f} for f in validation_files],
+                placeholder="Select Validation File"
+            )),
+        ]),
+        dbc.Row([
+            dash.html.Div(id='dropdown-output'),
+            dbc.Button("Analyze", id="analyze-button"),
+            dash.html.Div(id='graph-output')
+        ])
+    ])
+
+@app.callback(
+    Output('dropdown-output', 'children'),
+    [Input('gaze-data-dropdown', 'value'),
+     Input('validation-data-dropdown', 'value')]
+)
+def update_dropdown(gaze_data, validation_data):
+    ts_gaze_data = "-"
+    ts_validation_data = "-"
+    if gaze_data:
+        ts_gaze_data = re.search(r"gaze_data_(.*).json", gaze_data).group(1)
+        ts_gaze_data = datetime.datetime.strptime(ts_gaze_data, "%Y%m%d_%H%M%S")
+    if validation_data:
+        ts_validation_data = re.search(r"validation_(.*).json", validation_data).group(1)
+        ts_validation_data = datetime.datetime.strptime(ts_validation_data, "%Y%m%d_%H%M%S")
+    return dbc.Row([
+        dbc.Col(f"Timestamp: {ts_gaze_data}"),
+        dbc.Col(f"Timestamp: {ts_validation_data}")
+    ])
+
+@app.callback(
+    Output('graph-output', 'children'),
+    [Input('analyze-button', 'n_clicks')],
+    [Input('gaze-data-dropdown', 'value'),
+     Input('validation-data-dropdown', 'value')]
+)
+def update_graph(n_clicks, gaze_data, validation_data):
+    if n_clicks and gaze_data and validation_data:
+        return dash.dcc.Graph(figure={
+            'data': [
+                {'x': [1, 2, 3], 'y': [4, 1, 2], 'type': 'bar', 'name': 'Gaze Data'},
+                {'x': [1, 2, 3], 'y': [2, 4, 5], 'type': 'bar', 'name': 'Validation Data'},
+            ],
+            'layout': {
+                'title': 'Gaze Data vs Validation Data'
+            }
+        })
 
 if __name__ == '__main__':
     app.run(debug=True)
