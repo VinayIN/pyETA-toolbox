@@ -22,6 +22,7 @@ class ValidationWindow(qtw.QMainWindow):
     def initUI(self):
         self.setWindowTitle('Validation Window')
         self.setGeometry(100, 100, 600, 600)
+        self.screen_width, self.screen_height = self.size().width(), self.size().height()
         self.gridWidget = qtw.QWidget(self)
         self.setCentralWidget(self.gridWidget)
 
@@ -79,6 +80,7 @@ class ValidationWindow(qtw.QMainWindow):
     def keyPressEvent(self, event: qtg.QKeyEvent):
         if event.key() == qtc.Qt.Key.Key_F11:
             self.showNormal() if self.isFullScreen() else self.showFullScreen()
+            self.screen_width, self.screen_height = self.size().width(), self.size().height()
         elif event.key() == qtc.Qt.Key.Key_Escape:
             self.close()
         else:
@@ -98,7 +100,11 @@ class ValidationWindow(qtw.QMainWindow):
         if not os.path.exists(data_path):
             os.makedirs(data_path)
         with open(os.path.join(data_path, f"validation_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"), "w") as f:
-            json.dump(self.collected_data, f, indent=4)
+            json.dump(
+                {
+                    "screen_size": (self.screen_width, self.screen_height),
+                    "data": self.collected_data
+                }, f, indent=4)
             print("Data saved!")
 
 def run_validation_window():
