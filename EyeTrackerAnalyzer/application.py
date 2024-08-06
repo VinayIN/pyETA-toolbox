@@ -5,8 +5,14 @@ import asyncio
 import multiprocessing
 import dash
 import datetime
-from EyeTrackerAnalyzer.components.window import run_validation_window
-from EyeTrackerAnalyzer.components.tobii import Tobii
+from EyeTrackerAnalyzer import WARN, MESSAGE_QUEUE
+try:
+    from EyeTrackerAnalyzer.components.window import run_validation_window
+    from EyeTrackerAnalyzer.components.tobii import Tobii
+except ModuleNotFoundError:
+    WARN.generate_warning(
+        "Without tobii_research & PyQt6 library, Validation of eye-tracker won't work.",
+        category=UserWarning)
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
 
