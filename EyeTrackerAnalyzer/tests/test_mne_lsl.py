@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 async def send_data(duration):
     info = lsl.StreamInfo('TestStream', 'Markers', 2, 100, 'float32', 'uid001')
     outlet = lsl.StreamOutlet(info)
-    logger.info(f"StreamOutlet: {outlet.get_sinfo()}")
+    logger.debug(f"StreamOutlet: {outlet.get_sinfo()}")
 
     start_time = time.time()
     sent_samples = []
@@ -28,9 +28,9 @@ async def send_data(duration):
     return sent_samples
 
 async def receive_data(duration):
-    stream = StreamLSL(bufsize=1, stype='Markers', source_id="uid001").connect(acquisition_delay=0.01)
-    logger.info(f"Available channels types: {stream.get_channel_types()}")
-    logger.info(f"StreamInlet info: {stream.info}")
+    stream = StreamLSL(bufsize=1, stype='Markers', source_id="uid001").connect(acquisition_delay=0.001)
+    logger.debug(f"Available channels types: {stream.get_channel_types()}")
+    logger.debug(f"StreamInlet info: {stream.info}")
 
     start_time = time.time()
     received_samples = []
@@ -43,7 +43,7 @@ async def receive_data(duration):
             ch1, ch2 = sample
             logger.debug(f"Received - timestamp: {timestamp} ch1: {ch1}, ch2: {ch2}, shape: {sample.shape}")
             received_samples.append((ch1, ch2))
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.001)
     
     stream.disconnect()
     logger.info(f"Received samples: {len(received_samples)}")

@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
 testpaths = ["EyeTrackerAnalyzer/tests"]
 log_cli = true
-log_cli_level = "NOTSET"
+log_cli_level = "INFO"
 log_file = "log/test.log"
