@@ -6,6 +6,7 @@ import sys
 import tobii_research as tr
 from collections import deque
 import PyQt6.QtWidgets as qtw
+import argparse
 
 class Tobii:
     def __init__(self, save_data: bool = False, verbose: bool = False):
@@ -17,7 +18,6 @@ class Tobii:
         eyetrackers = tr.find_all_eyetrackers()
         self.eyetracker = eyetrackers[0] if eyetrackers else None
         if self.eyetracker:
-            screen_area = self.eyetracker.get_display_area()
             print(f"Address: {self.eyetracker.address}")
             print(f"Model: {self.eyetracker.model}")
             print(f"Serial number: {self.eyetracker.serial_number}")
@@ -66,20 +66,18 @@ class Tobii:
         if self.verbose: print(f'L: {data["left_eye"]["gaze_point"]}, R: {data["right_eye"]["gaze_point"]}')
         self.gaze_data.append(data)
     
-    def start_tracking(self, duration: float):
-        """Starts tracking for the given duration (in seconds) and saves the data to a file."""
+    def start_tracking(self):
+        """Starts tracking continuously and saves the data to a file, if save_data flag is set to True during initialization."""
+        callback_func = self._append_gaze_data if self.save_data else self._collect_gaze_data
         if self.eyetracker:
             try:
-                print(f"Starting tracking...for {duration} seconds")
-                self.eyetracker.subscribe_to(tr.EYETRACKER_GAZE_DATA, self._append_gaze_data, as_dictionary=True)
-                end_time = datetime.datetime.now() + datetime.timedelta(seconds=duration)
-                while datetime.datetime.now() <= end_time:
+                print(f"Starting tracking...")
+                self.eyetracker.subscribe_to(tr.EYETRACKER_GAZE_DATA, callback_func, as_dictionary=True)
+                while True:
                     continue
-                print("Stopping tracking...")
-                self.eyetracker.unsubscribe_from(tr.EYETRACKER_GAZE_DATA, self._append_gaze_data)
             except KeyboardInterrupt:
                 print("Stopping tracking...")
-                self.eyetracker.unsubscribe_from(tr.EYETRACKER_GAZE_DATA, self._append_gaze_data)
+                self.eyetracker.unsubscribe_from(tr.EYETRACKER_GAZE_DATA, callback_func)
             finally:
                 if self.save_data:
                     data_path = os.path.join(os.path.dirname(__package__), "data")
@@ -94,23 +92,31 @@ class Tobii:
                     print("Gaze Data saved!")
         else:
             print("No eye tracker found!")
-
-    def start_tracking_indefinite(self):
-        """Start tracking indefinitely unless interrupted."""
+    
+    def stop_tracking(self):
+        callback_func = self._append_gaze_data if self.save_data else self._collect_gaze_data
         try:
             if self.eyetracker:
-                print("Starting tracking...")
-                self.eyetracker.subscribe_to(tr.EYETRACKER_GAZE_DATA, self._collect_gaze_data, as_dictionary=True)
-                while True:
-                    continue
+                print("Stopping tracking...")
+                self.eyetracker.unsubscribe_from(tr.EYETRACKER_GAZE_DATA, callback_func)
             else:
                 print("No eye tracker found!")
-        except KeyboardInterrupt:
-            print("Stopping tracking...")
-            self.eyetracker.unsubscribe_from(tr.EYETRACKER_GAZE_DATA, self._collect_gaze_data)
+        except Exception as e:
+            print(f"Error stopping tracking: {e}")
+
 
 if __name__ == "__main__":
-    tobii = Tobii(save_data=False, verbose=False)
-    # tobii.start_tracking_indefinite()
-    tobii.start_tracking(10)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--save_data", help="Save the data to a file", action="store_true")
+    parser.add_argument("--verbose", help="Print the gaze data", action="store_true")
+    parser.add_argument("--duration", help="Duration to track the gaze data (In Seconds)", type=float, default=5)
+    args = parser.parse_args()
+
+    tobii = Tobii(save_data=args.save_data, verbose=args.verbose)
+    end_time = datetime.datetime.now() + datetime.timedelta(seconds=args.duration)
+    tobii.start_tracking()
+    while datetime.datetime.now() <= end_time:
+        continue
+    tobii.stop_tracking()
+    
         
