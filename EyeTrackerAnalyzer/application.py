@@ -7,7 +7,7 @@ import dash
 import datetime
 import numpy as np
 import pandas as pd
-from EyeTrackerAnalyzer import WARN, MESSAGE_QUEUE
+from EyeTrackerAnalyzer import WARN, MESSAGE_QUEUE, __version__
 try:
     from EyeTrackerAnalyzer.components.window import run_validation_window
     from EyeTrackerAnalyzer.components.tobii import Tobii
@@ -35,12 +35,16 @@ app = dash.Dash(
     suppress_callback_exceptions=True)
 
 app.layout = dbc.Container([
-    dbc.Row(dash.html.H1("Eye Tracker Analyzer")),
+    dash.html.H1("Eye Tracker Analyzer", className="text-center my-4"),
+    dash.html.Hr(),
     dbc.Row([
         dbc.Col(
             dbc.Row([
                 dash.dcc.Markdown(
-                    '''
+                    f'''
+                    version: `{__version__}`
+
+
                     This interface allows you to validate the eye tracker accuracy along with the following:
                     - View gaze points
                     - View fixation points
@@ -50,10 +54,16 @@ app.layout = dbc.Container([
                 ),
             ])),
         dbc.Col(
-            dash.html.Div([
-                dbc.Row([dbc.Button("Validate Eye Tracker", color="primary", outline=True, id="open-grid-window")])
-            ])),
-        ]),
+                [
+                    dbc.Col(
+                        [
+                            dbc.Col(dash.dcc.RadioItems(options=[{"label": " mock", "value": "mock"}, {"label": " eye-tracker", "value": "eye-tracker"}], value='mock')),
+                            dbc.Col(dbc.Button("Start - lsl Stream", color="primary", disabled=True, outline=True, id="start-lsl-stream")),
+                        ], className="my-2"),
+                    dash.html.Hr(),
+                    dbc.Row([dbc.Button("Validate Eye Tracker", color="secondary", disabled=True, outline=True, id="open-grid-window")], className='my-4')
+                ]),
+        ],),
     dbc.Tabs([
         dbc.Tab(label="Gaze points", tab_id="eye-tracker-gaze"),
         dbc.Tab(label="Fixation", tab_id="eye-tracker-fixation"),
@@ -134,7 +144,7 @@ def render_metrics_tab():
         ]),
         dbc.Row([
             dash.html.Div(id='dropdown-output'),
-            dbc.Button("Analyze", color="success", outline=True, id="analyze-button"),
+            dbc.Button("Analyze", color="success", disabled=False, outline=True, id="analyze-button"),
             dash.html.Div(id='graph-output')
         ])
     ])
