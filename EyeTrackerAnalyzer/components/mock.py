@@ -138,7 +138,6 @@ class MockEyeTracker:
         self.should_stop = True
         callback_func = self._append_gaze_data if self.save_data else self._collect_gaze_data
         try:
-            print("Stopping tracking...")
             self.unsubscribe_from(callback_func)
         except Exception as e:
             print(f"Error stopping tracking: {e}")
@@ -148,12 +147,7 @@ if __name__ == "__main__":
     parser.add_argument("--data_rate", help="Data rate in Hz", type=int, default=60)
     parser.add_argument("--save_data", help="Save the data to a file", action="store_true")
     parser.add_argument("--verbose", help="Print the gaze data", action="store_true")
-    parser.add_argument("--duration", help="Duration to track the gaze data (In Seconds)", type=float, default=5)
     args = parser.parse_args()
 
     mock_eye_tracker = MockEyeTracker(data_rate=args.data_rate, save_data=args.save_data, verbose=args.verbose)
-    end_time = datetime.datetime.now() + datetime.timedelta(seconds=args.duration)
     mock_eye_tracker.start_tracking()
-    while datetime.datetime.now() <= end_time:
-        continue
-    mock_eye_tracker.stop_tracking()

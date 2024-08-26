@@ -50,8 +50,8 @@ app.layout = dbc.Container([
                 ),
             ])),
         dbc.Col(
-            dbc.Row([
-                dbc.Button("Validate Eye Tracker", id="open-grid-window")
+            dash.html.Div([
+                dbc.Row([dbc.Button("Validate Eye Tracker", color="primary", outline=True, id="open-grid-window")])
             ])),
         ]),
     dbc.Tabs([
@@ -93,14 +93,24 @@ def update_window(n_clicks):
 def render_tab_content(active_tab, data):
     if active_tab == "eye-tracker-gaze":
         print("plotting gaze points")
-        return "Gaze tab"
+        return render_gaze_tab()
     elif active_tab == "eye-tracker-fixation":
         print("plotting fixation points")
-        return "Fixation tab"
+        return render_fixation_tab()
     elif active_tab == "eye-tracker-metrics":
         print("plotting metrics")
         return render_metrics_tab()
     return "No tab selected"
+
+def render_gaze_tab():
+    return dbc.Container([
+            dbc.Row([dbc.Button("Fetch (Gaze points)", color="primary", outline=True, disabled=True, id="collect-gaze-point")], className='my-2')
+        ])
+
+def render_fixation_tab():
+    return dbc.Container([
+            dbc.Row([dbc.Button("Fetch (Modified Gaze points)", outline=True, color="primary", disabled=True, id="append-gaze-point")], className='my-2')
+        ])
 
 def get_file_names(prefix):
     return [f for f in os.listdir('data/') if f.startswith(prefix)]
@@ -124,7 +134,7 @@ def render_metrics_tab():
         ]),
         dbc.Row([
             dash.html.Div(id='dropdown-output'),
-            dbc.Button("Analyze", id="analyze-button"),
+            dbc.Button("Analyze", color="success", outline=True, id="analyze-button"),
             dash.html.Div(id='graph-output')
         ])
     ])
@@ -227,7 +237,11 @@ def update_graph(n_clicks, gaze_data, validation_data):
         return dbc.Container([
             dash.dcc.Graph(figure=fig, className="metric-grid"),
             dash.dcc.Graph(figure=metric_fig, className="metric-values"),
-            dash.html.Div(f"Accuracy: {metric.get('accuracy')}"),
+            dash.dcc.Markdown(
+                f'''
+                Accuracy: `{metric.get('accuracy')}`
+                '''
+            ),
         ])
     return dash.html.Div()
 
