@@ -5,6 +5,8 @@ import asyncio
 import multiprocessing
 import dash
 import datetime
+import numpy as np
+import pandas as pd
 from EyeTrackerAnalyzer import WARN, MESSAGE_QUEUE
 try:
     from EyeTrackerAnalyzer.components.window import run_validation_window
@@ -15,6 +17,7 @@ except ModuleNotFoundError:
         category=UserWarning)
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
+import plotly.express as px
 
 def run_async_function(async_func):
     loop = asyncio.new_event_loop()
@@ -145,6 +148,29 @@ def update_dropdown(gaze_data, validation_data):
         dbc.Col(f"Timestamp: {ts_validation_data}")
     ])
 
+def get_confusion_matrix_metric(matrix):
+
+    num_classes = matrix.shape[0]
+    accuracy = 0.0
+    precision = np.zeros(num_classes)
+    recall = np.zeros(num_classes)
+    f1_score = np.zeros(num_classes)
+
+    # Calculate metrics for each class
+    for i in range(num_classes):
+        tp = matrix[i, i]
+        fp = np.sum(matrix[:, i]) - tp
+        fn = np.sum(matrix[i, :]) - tp
+        tn = np.sum(matrix) - tp - fp - fn
+
+        precision[i] = tp / (tp + fp) if tp + fp > 0 else 0
+        recall[i] = tp / (tp + fn) if tp + fn > 0 else 0
+        f1_score[i] = 2 * precision[i] * recall[i] / (precision[i] + recall[i]) if precision[i] + recall[i] > 0 else 0
+
+    accuracy = np.trace(matrix) / np.sum(matrix)
+
+    return {'accuracy': accuracy, 'precision': precision, 'recall': recall, 'f1_score': f1_score}
+
 @app.callback(
     Output('graph-output', 'children'),
     [Input('analyze-button', 'n_clicks')],
@@ -152,16 +178,58 @@ def update_dropdown(gaze_data, validation_data):
      Input('validation-data-dropdown', 'value')]
 )
 def update_graph(n_clicks, gaze_data, validation_data):
-    if n_clicks and gaze_data and validation_data:
-        return dash.dcc.Graph(figure={
-            'data': [
-                {'x': [1, 2, 3], 'y': [4, 1, 2], 'type': 'bar', 'name': 'Gaze Data'},
-                {'x': [1, 2, 3], 'y': [2, 4, 5], 'type': 'bar', 'name': 'Validation Data'},
-            ],
-            'layout': {
-                'title': 'Gaze Data vs Validation Data'
-            }
-        })
+    if n_clicks:
+        matrix = np.array([
+            [10, 2, 3, 1, 0, 1, 2, 1, 0],
+            [1, 15, 2, 0, 2, 0, 1, 0, 1],
+            [2, 1, 12, 2, 0, 1, 1, 0, 1],
+            [0, 0, 1, 18, 0, 2, 0, 0, 1],
+            [1, 2, 0, 0, 16, 0, 1, 0, 1],
+            [0, 1, 2, 1, 0, 17, 1, 0, 1],
+            [2, 0, 1, 0, 1, 1, 15, 0, 1],
+            [0, 0, 0, 0, 0, 0, 0, 20, 0],
+            [0, 1, 1, 1, 1, 1, 1, 0, 15]
+        ])
+
+        normalized_matrix = matrix / np.sum(matrix, axis=1, keepdims=True)
+        normalized_matrix = np.round(normalized_matrix, decimals=2)
+        metric = get_confusion_matrix_metric(normalized_matrix)
+        labels = ["1","2","3","4","5","6","7","8","9"]
+        
+        # Create a DataFrame for the confusion matrix
+        metric_df = pd.DataFrame.from_dict(metric)
+        df = pd.DataFrame(normalized_matrix, index=labels, columns=labels)
+        df = df.reset_index().melt(id_vars='index')
+        df.columns = ['Validation', 'Gaze', 'Value']
+        
+        fig = px.imshow(
+            normalized_matrix,
+            x=labels,
+            y=labels,
+            color_continuous_scale='Blues',
+            labels=dict(x="Gaze", y="Validation", color="Value"),
+            text_auto=True)
+        
+        fig.update_layout(
+            title='Validation Data Vs Gaze Data',
+            xaxis=dict(side='top')
+        )
+
+        
+        metric_fig = px.bar(
+            metric,
+            x=labels,
+            y=metric_df.columns.drop(["accuracy"], errors="ignore"),
+            barmode="group",
+            labels={"x": "Class", "y": "Value"},
+            title='Precision, Recall, and F1-Score')
+
+        return dbc.Container([
+            dash.dcc.Graph(figure=fig, className="metric-grid"),
+            dash.dcc.Graph(figure=metric_fig, className="metric-values"),
+            dash.html.Div(f"Accuracy: {metric.get('accuracy')}"),
+        ])
+    return dash.html.Div()
 
 if __name__ == '__main__':
     app.run(debug=True)

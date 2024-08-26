@@ -71,13 +71,12 @@ class Tobii:
         callback_func = self._append_gaze_data if self.save_data else self._collect_gaze_data
         if self.eyetracker:
             try:
-                print(f"Starting tracking...")
+                print("Starting tracking...")
                 self.eyetracker.subscribe_to(tr.EYETRACKER_GAZE_DATA, callback_func, as_dictionary=True)
                 while True:
                     continue
             except KeyboardInterrupt:
-                print("Stopping tracking...")
-                self.eyetracker.unsubscribe_from(tr.EYETRACKER_GAZE_DATA, callback_func)
+                self.stop_tracking()
             finally:
                 if self.save_data:
                     data_path = os.path.join(os.path.dirname(__package__), "data")
