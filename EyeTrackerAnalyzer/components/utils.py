@@ -1,14 +1,25 @@
 import warnings
 import sys
+import platform
 from typing import List, Optional
 import PyQt6.QtWidgets as qtw
 
 def get_current_screen_size():
+    app = qtw.QApplication.instance()
+    if app is None:
         app = qtw.QApplication(sys.argv)
-        screen = app.primaryScreen()
-        size = screen.size()
-        width, height = size.width(), size.height()
-        return width, height
+
+    screen = app.primaryScreen()
+    size = screen.size()
+    width, height = size.width(), size.height()
+    return width, height
+
+def get_system_info():
+    node = platform.node()
+    system = platform.system()
+    machine = platform.machine()
+    width, height = get_current_screen_size()
+    return f"{node}_{system}_{machine}_{width}x{height}"
 
 class WarningGenerator:
     def __init__(self, filter_categories: Optional[List]=None):

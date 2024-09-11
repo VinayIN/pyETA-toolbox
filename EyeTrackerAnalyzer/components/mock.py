@@ -92,6 +92,6 @@ if __name__ == "__main__":
     mock_eye_tracker.start()
     while True:
         try:
-            time.sleep(1)
+            continue
         except KeyboardInterrupt:
             mock_eye_tracker.stop()

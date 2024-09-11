@@ -6,6 +6,7 @@ import random
 import datetime
 import json
 import os
+from EyeTrackerAnalyzer.components.utils import get_system_info, get_current_screen_size
 
 class ValidationWindow(qtw.QMainWindow):
     def __init__(self):
@@ -40,7 +41,6 @@ class ValidationWindow(qtw.QMainWindow):
         self.circle.hide()
 
         self.show()
-
         self.animation = qtc.QPropertyAnimation(self.circle, b"pos")
         self.animation.finished.connect(self.on_animation_finished)
         qtc.QTimer.singleShot(self.stay_duration, self.start_sequence)
@@ -99,10 +99,11 @@ class ValidationWindow(qtw.QMainWindow):
         data_path = os.path.join(os.path.dirname(__package__), "data")
         if not os.path.exists(data_path):
             os.makedirs(data_path)
-        with open(os.path.join(data_path, f"validation_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"), "w") as f:
+        with open(os.path.join(data_path, f"{get_system_info()}.json"), "w") as f:
             json.dump(
                 {
                     "screen_size": (self.screen_width, self.screen_height),
+                    "stay_duration": self.stay_duration,
                     "data": self.collected_data
                 }, f, indent=4)
             print("Validation Data saved!")
