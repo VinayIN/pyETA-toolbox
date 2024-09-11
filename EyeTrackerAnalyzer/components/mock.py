@@ -23,7 +23,6 @@ class MockEyeTracker(Thread):
         self.model = "ZA03046BINAY2024"
         self.device_name = "Mock Tracker"
         self.serial_number = "ZA03046BINAY2024"
-        print(f"Mock Screen Resolution: {self.screen_width}x{self.screen_height}")
         self.callbacks = dict()
         self.curr_x = 0.0
         self.curr_y = 0.0

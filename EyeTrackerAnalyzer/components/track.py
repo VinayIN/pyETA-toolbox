@@ -30,6 +30,7 @@ class Tracker:
             self.eyetrackers = tr.find_all_eyetrackers()
             self.eyetracker = self.eyetrackers[0] if self.eyetrackers else None
         if self.eyetracker:
+            print(f"Screen Resolution: {self.screen_width}x{self.screen_height}")
             print(f"Address: {self.eyetracker.address}")
             print(f"Model: {self.eyetracker.model}")
             print(f"Name: {self.eyetracker.device_name}")
