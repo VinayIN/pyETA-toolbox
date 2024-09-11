@@ -5,7 +5,7 @@ import os
 import json
 
 from mne_lsl import lsl
-import tobii_research as tr
+#import tobii_research as tr
 import numpy as np
 from EyeTrackerAnalyzer.components.mock import MockEyeTracker
 from EyeTrackerAnalyzer.components.utils import get_current_screen_size
@@ -54,7 +54,6 @@ class Tracker:
             }
         }
         if self.verbose: print(f'L: {data["left_eye"]["gaze_point"]}, R: {data["right_eye"]["gaze_point"]}')
-        self.gaze_data_deque.append(data)
     
     def _append_gaze_data(self, gaze_data):
         data = {
@@ -87,7 +86,7 @@ class Tracker:
         if self.eyetracker:
             try:
                 print("Starting tracking...")
-                self.eyetracker.subscribe_to(tr.EYETRACKER_GAZE_DATA, callback_func, as_dictionary=True)
+                self.eyetracker.subscribe_to(self.eyetracker.EYETRACKER_GAZE_DATA, callback_func, as_dictionary=True)
                 while True:
                     continue
             except KeyboardInterrupt:
@@ -112,7 +111,7 @@ class Tracker:
         try:
             if self.eyetracker:
                 print("Stopping tracking...")
-                self.eyetracker.unsubscribe_from(tr.EYETRACKER_GAZE_DATA, callback_func)
+                self.eyetracker.unsubscribe_from(self.eyetracker.EYETRACKER_GAZE_DATA, callback_func)
             else:
                 print("No eye tracker found!")
         except Exception as e:

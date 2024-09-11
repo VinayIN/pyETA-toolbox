@@ -15,6 +15,7 @@ class MockEyeTracker(Thread):
 
     def __init__(self, data_rate=600, verbose=False):
         Thread.__init__(self, name="MockEyeTracker", daemon=True)
+        self.verbose = verbose
         self.data_rate = data_rate
         self.listener = None
         self.screen_width, self.screen_height = get_current_screen_size()
@@ -27,7 +28,6 @@ class MockEyeTracker(Thread):
         self.curr_x = 0.0
         self.curr_y = 0.0
         self.should_stop = False
-        print("\n\nPress Ctrl+C to stop tracking...")
     
     def get_timestamp(self):
         return datetime.datetime.now().isoformat()
@@ -76,6 +76,7 @@ class MockEyeTracker(Thread):
                             'right_pupil_diameter': 8.0 + 4 * random.uniform(-1, 1),
                             'right_pupil_validity': random.uniform(0, 1) > 0.5
                         })
+                    if self.verbose: print(f"{x}, {y}")
             lis.join()
 
     def stop(self):
@@ -89,3 +90,8 @@ if __name__ == "__main__":
 
     mock_eye_tracker = MockEyeTracker(data_rate=args.data_rate, verbose=args.verbose)
     mock_eye_tracker.start()
+    while True:
+        try:
+            time.sleep(1)
+        except KeyboardInterrupt:
+            mock_eye_tracker.stop()
