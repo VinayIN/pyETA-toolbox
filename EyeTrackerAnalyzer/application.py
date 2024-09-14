@@ -3,6 +3,8 @@ import os
 import re
 import asyncio
 import multiprocessing
+import subprocess
+import signal
 import dash
 import datetime
 import numpy as np
@@ -59,8 +61,15 @@ app.layout = dbc.Container([
                 [
                     dbc.Col(
                         [
-                            dbc.Col(dash.dcc.RadioItems(options=[{"label": " mock", "value": "mock"}, {"label": " eye-tracker", "value": "eye-tracker"}], value='mock')),
-                            dbc.Col(dbc.Button("Start - lsl Stream", color="primary", disabled=False, outline=True, id="start-lsl-stream")),
+                            dbc.Row(dash.dcc.RadioItems(options=[{"label": " mock", "value": "mock"}, {"label": " eye-tracker", "value": "eye-tracker"}], value='mock', id="tracker-type")),
+                            dbc.Row(dbc.Label("Data Rate (Hz)", width="auto")),
+                            dbc.Row(dash.dcc.Slider(min=0, max=800, value=600, id="tracker-data-rate")),
+                            dbc.Row(dash.dcc.Checklist(options=[{"label": " push to stream (tobii_gaze)", "value": "push_stream"}], value=["push_stream"], id="tracker-push-stream")),
+                            dbc.Row(dash.dcc.Checklist(options=[{"label": " dont provide screen NaN (default: 0)", "value": "dont_screen_nans"}], value=["dont_screen_nans"], id="tracker-screen-nans")),
+                            dbc.Row([
+                                dbc.Col(dbc.Button("Start - lsl Stream", color="primary", disabled=False, outline=True, id="start-lsl-stream"), width="auto"),
+                                dbc.Col(dbc.Button("Stop - lsl Stream", color="danger", disabled=False, outline=True, id="stop-lsl-stream"), width="auto")
+                            ])
                         ], className="my-2"),
                     dash.html.Hr(),
                     dbc.Row([dbc.Button("Validate Eye Tracker", color="secondary", disabled=False, outline=True, id="open-grid-window")], className='my-4')
@@ -84,7 +93,7 @@ app.layout = dbc.Container([
 
 
 @app.callback(
-    Output('open-grid-window', 'n_clicks'),
+    Output('open-grid-window', 'value'),
     [Input('open-grid-window', 'n_clicks')]
 )
 def update_window(n_clicks):
@@ -96,16 +105,72 @@ def update_window(n_clicks):
             tobii_result.get()
             validation_result.get()
         print("validation window closed")
-    return n_clicks
+        return 1
+    return 0
+
+def run_tracker(params):
+    tracker = Tracker(
+        data_rate=params['data_rate'],
+        use_mock=params['use_mock'],
+        screen_nans=not params['dont_screen_nans'],
+        verbose=params['verbose'],
+        push_stream=params['push_stream'],
+        save_data=params['save_data']
+    )
+    tracker.start_tracking()
 
 @app.callback(
-    Output("start-lsl-stream", "n_clicks"),
-    [Input("start-lsl-stream", "n_clicks")]
+    Output("start-lsl-stream", "value"),
+    [
+        Input("start-lsl-stream", "n_clicks"),
+        Input("tracker-type", "value"),
+        Input("tracker-data-rate", "value"),
+        Input("tracker-push-stream", "value"),
+        Input("tracker-screen-nans", "value")
+    ]
 )
-def start_lsl_stream(n_clicks):
+def start_lsl_stream(n_clicks, tracker_type, data_rate, push_stream, dont_screen_nans):
     if n_clicks:
-        print("Starting LSL Stream")
-    return n_clicks
+        use_mock = True if tracker_type == "mock" else False
+        push_stream = True if "push_stream" in push_stream else False
+        dont_screen_nans = True if "dont_screen_nans" in dont_screen_nans else False
+        data_rate = data_rate if data_rate else 600
+
+        tracker_params = {
+            'data_rate': data_rate,
+            'use_mock': use_mock,
+            'dont_screen_nans': dont_screen_nans,
+            'verbose': False,
+            'push_stream': push_stream,
+            'save_data': False
+        }
+
+        process = multiprocessing.Process(target=run_tracker, args=(tracker_params,), daemon=True)
+        process.start()
+        return process.pid
+    return None
+
+@app.callback(
+    Output("stop-lsl-stream", "n_clicks"),
+    [Input("stop-lsl-stream", "n_clicks"), dash.State("start-lsl-stream", "value")])
+def stop_lsl_stream(n_clicks, pid):
+    if n_clicks and pid:
+        try:
+            os.kill(pid, signal.SIGINT)
+            print(f"Process with PID {pid} stopped.")
+            return n_clicks
+        except ProcessLookupError:
+            print(f"Process with PID {pid} not found.")
+    return 0
+
+@app.callback(
+    [Output("start-lsl-stream", "disabled"), Output("stop-lsl-stream", "disabled")],
+    [Input("start-lsl-stream", "value")]
+)
+def update_button_states(pid):
+    if pid:
+        return True, False
+    return False, True
 
 @app.callback(
     Output("tab-content", "children"),
@@ -162,21 +227,15 @@ def render_metrics_tab():
 
 @app.callback(
     Output('dropdown-output', 'children'),
-    [Input('gaze-data-dropdown', 'value'),
-     Input('validation-data-dropdown', 'value')]
+    [Input('gaze-data-dropdown', 'value')]
 )
-def update_dropdown(gaze_data, validation_data):
+def update_dropdown(gaze_data):
     ts_gaze_data = "-"
-    ts_validation_data = "-"
     if gaze_data:
         ts_gaze_data = re.search(r"gaze_data_(.*).json", gaze_data).group(1)
         ts_gaze_data = datetime.datetime.strptime(ts_gaze_data, "%Y%m%d_%H%M%S")
-    if validation_data:
-        ts_validation_data = re.search(r"validation_(.*).json", validation_data).group(1)
-        ts_validation_data = datetime.datetime.strptime(ts_validation_data, "%Y%m%d_%H%M%S")
     return dbc.Row([
-        dbc.Col(f"Timestamp: {ts_gaze_data}"),
-        dbc.Col(f"Timestamp: {ts_validation_data}")
+        dbc.Col(f"Timestamp: {ts_gaze_data}")
     ])
 
 def get_confusion_matrix_metric(matrix):

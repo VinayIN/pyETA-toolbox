@@ -136,6 +136,8 @@ class Tracker:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument("--push_stream", action="store_true",
+                        help="Push the data to LSL stream."),
     parser.add_argument("--data_rate", default=600, type=int,
                         help="The rate of the data stream.")
     parser.add_argument("--use_mock", action="store_true",
@@ -157,7 +159,7 @@ if __name__ == '__main__':
         use_mock=args.use_mock,
         screen_nans=not args.dont_screen_nans,
         verbose=args.verbose,
-        push_stream=False,
+        push_stream=args.push_stream,
         save_data=args.save_data
     )
     if args.duration:
