@@ -99,7 +99,7 @@ class ValidationWindow(qtw.QMainWindow):
         data_path = os.path.join(os.path.dirname(__package__), "data")
         if not os.path.exists(data_path):
             os.makedirs(data_path)
-        with open(os.path.join(data_path, f"{eta_utils.get_system_info()}.json"), "w") as f:
+        with open(os.path.join(data_path, f"system_{eta_utils.get_system_info()}.json"), "w") as f:
             json.dump(
                 {
                     "screen_size": (self.screen_width, self.screen_height),

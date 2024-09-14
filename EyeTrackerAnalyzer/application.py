@@ -21,8 +21,15 @@ def run_async_function(async_func):
     loop.close()
 
 def run_tobii():
-    tobii_process = Tracker(save_data=True, verbose=True)
-    tobii_process.start_tracking(duration=10)
+    tobii_process = Tracker(
+        use_mock=True,
+        screen_nans=True,
+        save_data=True,
+        push_stream=False,
+        verbose=False)
+    duration = (9*(2000+1000))/1000 + (2000*3)/1000 + 2000/1000
+    print(f"Totat Duration: {duration}")
+    tobii_process.start_tracking(duration)
 
 app = dash.Dash(
     __package__,
@@ -53,10 +60,10 @@ app.layout = dbc.Container([
                     dbc.Col(
                         [
                             dbc.Col(dash.dcc.RadioItems(options=[{"label": " mock", "value": "mock"}, {"label": " eye-tracker", "value": "eye-tracker"}], value='mock')),
-                            dbc.Col(dbc.Button("Start - lsl Stream", color="primary", disabled=True, outline=True, id="start-lsl-stream")),
+                            dbc.Col(dbc.Button("Start - lsl Stream", color="primary", disabled=False, outline=True, id="start-lsl-stream")),
                         ], className="my-2"),
                     dash.html.Hr(),
-                    dbc.Row([dbc.Button("Validate Eye Tracker", color="secondary", disabled=True, outline=True, id="open-grid-window")], className='my-4')
+                    dbc.Row([dbc.Button("Validate Eye Tracker", color="secondary", disabled=False, outline=True, id="open-grid-window")], className='my-4')
                 ]),
         ],),
     dbc.Tabs([
@@ -92,6 +99,15 @@ def update_window(n_clicks):
     return n_clicks
 
 @app.callback(
+    Output("start-lsl-stream", "n_clicks"),
+    [Input("start-lsl-stream", "n_clicks")]
+)
+def start_lsl_stream(n_clicks):
+    if n_clicks:
+        print("Starting LSL Stream")
+    return n_clicks
+
+@app.callback(
     Output("tab-content", "children"),
     [Input("tabs", "active_tab"), Input("store", "data")],
 )
@@ -122,7 +138,7 @@ def get_file_names(prefix):
 
 def render_metrics_tab():
     gaze_files = get_file_names("gaze_data_")
-    validation_files = get_file_names("validation_")
+    validation_files = get_file_names("system_")
 
     return dbc.Container([
         dbc.Row([

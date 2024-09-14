@@ -5,6 +5,7 @@ import os
 import json
 import time
 
+from typing import Optional
 from mne_lsl import lsl
 import EyeTrackerAnalyzer.components.mock as eta_mock
 import EyeTrackerAnalyzer.components.utils as eta_utils
@@ -16,14 +17,16 @@ import numpy as np
 
 
 class Tracker:
-    def __init__(self, data_rate=600, use_mock=False, screen_nans=True, verbose=False, save_data=False):
+    def __init__(self, data_rate=600, use_mock=False, screen_nans=True, verbose=False, push_stream=False, save_data=False):
         self.screen_width, self.screen_height = eta_utils.get_current_screen_size()
         self.data_rate = data_rate
         self.screen_nans = screen_nans
         self.verbose = verbose
         self.save_data = save_data
+        self.push_stream = push_stream
         self.gaze_data = []
         self.gaze_id = None
+        self.lsl_gaze_outlet = None
         
         try:
             if use_mock:
@@ -48,14 +51,15 @@ class Tracker:
         except Exception as e:
             raise ValueError(f"Error initializing the eye tracker: {e}")
 
-        info = lsl.StreamInfo(
-            name='tobii_gaze',
-            stype='Gaze',
-            n_channels=11,
-            sfreq=self.data_rate,
-            dtype='float64',
-            source_id=self.eyetracker.serial_number)
-        self.lsl_gaze_outlet = lsl.StreamOutlet(info)
+        if self.push_stream:
+            info = lsl.StreamInfo(
+                name='tobii_gaze',
+                stype='Gaze',
+                n_channels=11,
+                sfreq=self.data_rate,
+                dtype='float64',
+                source_id=self.eyetracker.serial_number)
+            self.lsl_gaze_outlet = lsl.StreamOutlet(info)
         print("\n\nPress Ctrl+C to stop tracking...")
     
     def _collect_gaze_data(self, gaze_data):
@@ -71,31 +75,36 @@ class Tracker:
                 "pupil_diameter": gaze_data.get("right_pupil_diameter")
             }
         }
-        self.lsl_gaze_outlet.push_sample(
-            np.array([
-                data["left_eye"]["gaze_point"][0] if data["left_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
-                data["left_eye"]["gaze_point"][1] if data["left_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
-                data["left_eye"]["pupil_diameter"] if data["left_eye"]["pupil_diameter"] else 0 if self.screen_nans else np.nan,
-                data["right_eye"]["gaze_point"][0] if data["right_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
-                data["right_eye"]["gaze_point"][1] if data["right_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
-                data["right_eye"]["pupil_diameter"] if data["right_eye"]["pupil_diameter"] else 0 if self.screen_nans else np.nan,
-                self.screen_width,
-                self.screen_height,
-                data["timestamp"],
-                data["device_time_stamp"],
-                lsl.local_clock()
-            ], dtype=np.float64)
-        )
+        if self.push_stream:
+            self.lsl_gaze_outlet.push_sample(
+                np.array([
+                    data["left_eye"]["gaze_point"][0] if data["left_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
+                    data["left_eye"]["gaze_point"][1] if data["left_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
+                    data["left_eye"]["pupil_diameter"] if data["left_eye"]["pupil_diameter"] else 0 if self.screen_nans else np.nan,
+                    data["right_eye"]["gaze_point"][0] if data["right_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
+                    data["right_eye"]["gaze_point"][1] if data["right_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
+                    data["right_eye"]["pupil_diameter"] if data["right_eye"]["pupil_diameter"] else 0 if self.screen_nans else np.nan,
+                    self.screen_width,
+                    self.screen_height,
+                    data["timestamp"],
+                    data["device_time_stamp"],
+                    lsl.local_clock()
+                ], dtype=np.float64)
+            )
         if self.save_data: self.gaze_data.append(data)
         if self.verbose: print(f'L: {data["left_eye"]["gaze_point"]}, R: {data["right_eye"]["gaze_point"]}')
 
-    def start_tracking(self):
+    def start_tracking(self, duration: Optional[float]=None):
         """Starts tracking continuously and saves the data to a file, if save_data flag is set to True during initialization."""
+        end_time = datetime.datetime.now() + datetime.timedelta(seconds=duration) if duration is not None else None
         if self.eyetracker:
             try:
                 print("Starting tracking...")
                 self.eyetracker.subscribe_to(self.gaze_id, self._collect_gaze_data, as_dictionary=True)
                 while True:
+                    if end_time and datetime.datetime.now() >= end_time:
+                        self.stop_tracking()
+                        break
                     time.sleep(1)
             except KeyboardInterrupt:
                 self.stop_tracking()
@@ -137,6 +146,8 @@ if __name__ == '__main__':
                         help="Save the data to a file")
     parser.add_argument("--verbose", action="store_true",
                         help="Use this to display print statements")
+    parser.add_argument("--duration", type=float,
+                        help="The duration for which to track the data")
     args = parser.parse_args()
 
     print("Arguments: ", args)
@@ -146,7 +157,11 @@ if __name__ == '__main__':
         use_mock=args.use_mock,
         screen_nans=not args.dont_screen_nans,
         verbose=args.verbose,
+        push_stream=False,
         save_data=args.save_data
     )
-    
-    tracker.start_tracking()
+    if args.duration:
+        print(f"Tracking for {args.duration} seconds...")
+        tracker.start_tracking(duration=args.duration)
+    else:
+        tracker.start_tracking()
