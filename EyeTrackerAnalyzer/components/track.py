@@ -60,6 +60,7 @@ class Tracker:
                 dtype='float64',
                 source_id=self.eyetracker.serial_number)
             self.lsl_gaze_outlet = lsl.StreamOutlet(info)
+        print(f"Member Variables: {vars(self)}")
         print("\n\nPress Ctrl+C to stop tracking...")
     
     def _collect_gaze_data(self, gaze_data):

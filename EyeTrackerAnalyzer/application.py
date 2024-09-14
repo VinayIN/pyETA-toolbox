@@ -64,8 +64,13 @@ app.layout = dbc.Container([
                             dbc.Row(dash.dcc.RadioItems(options=[{"label": " mock", "value": "mock"}, {"label": " eye-tracker", "value": "eye-tracker"}], value='mock', id="tracker-type")),
                             dbc.Row(dbc.Label("Data Rate (Hz)", width="auto")),
                             dbc.Row(dash.dcc.Slider(min=0, max=800, value=600, id="tracker-data-rate")),
-                            dbc.Row(dash.dcc.Checklist(options=[{"label": " push to stream (tobii_gaze)", "value": "push_stream"}], value=["push_stream"], id="tracker-push-stream")),
-                            dbc.Row(dash.dcc.Checklist(options=[{"label": " dont provide screen NaN (default: 0)", "value": "dont_screen_nans"}], value=["dont_screen_nans"], id="tracker-screen-nans")),
+                            dbc.Row(dash.dcc.Checklist(
+                                options=[
+                                    {"label": " push to stream (tobii_gaze)", "value": "push_stream"},
+                                    {"label": " dont provide screen NaN (default: 0)", "value": "dont_screen_nans"},
+                                    {"label": " verbose", "value": "verbose"}
+                                ],
+                                value=["push_stream", "dont_screen_nans"], id="tracker-extra-options")),
                             dbc.Row([
                                 dbc.Col(dbc.Button("Start - lsl Stream", color="primary", disabled=False, outline=True, id="start-lsl-stream"), width="auto"),
                                 dbc.Col(dbc.Button("Stop - lsl Stream", color="danger", disabled=False, outline=True, id="stop-lsl-stream"), width="auto")
@@ -125,22 +130,22 @@ def run_tracker(params):
         Input("start-lsl-stream", "n_clicks"),
         Input("tracker-type", "value"),
         Input("tracker-data-rate", "value"),
-        Input("tracker-push-stream", "value"),
-        Input("tracker-screen-nans", "value")
+        Input("tracker-extra-options", "value"),
     ]
 )
-def start_lsl_stream(n_clicks, tracker_type, data_rate, push_stream, dont_screen_nans):
+def start_lsl_stream(n_clicks, tracker_type, data_rate, extra_options):
     if n_clicks:
         use_mock = True if tracker_type == "mock" else False
-        push_stream = True if "push_stream" in push_stream else False
-        dont_screen_nans = True if "dont_screen_nans" in dont_screen_nans else False
+        push_stream = True if "push_stream" in extra_options else False
+        dont_screen_nans = True if "dont_screen_nans" in extra_options else False
         data_rate = data_rate if data_rate else 600
+        verbose = True if "verbose" in extra_options else False
 
         tracker_params = {
             'data_rate': data_rate,
             'use_mock': use_mock,
             'dont_screen_nans': dont_screen_nans,
-            'verbose': False,
+            'verbose': verbose,
             'push_stream': push_stream,
             'save_data': False
         }
