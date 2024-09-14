@@ -6,13 +6,13 @@ from threading import Thread
 from pynput import mouse
 import EyeTrackerAnalyzer.components.utils as eta_utils
 
+EYETRACKER_GAZE_DATA = 'mock_gaze_data'
+CAPABILITY_HAS_GAZE_DATA = 'mock_has_gaze_data'
+
+KNOWN_DATA_IDS = [EYETRACKER_GAZE_DATA]
+device_capabilities = [CAPABILITY_HAS_GAZE_DATA]
+
 class MockEyeTracker(Thread):
-    EYETRACKER_GAZE_DATA = 'mock_gaze_data'
-    CAPABILITY_HAS_GAZE_DATA = 'mock_has_gaze_data'
-
-    KNOWN_DATA_IDS = [EYETRACKER_GAZE_DATA]
-    device_capabilities = [CAPABILITY_HAS_GAZE_DATA]
-
     def __init__(self, data_rate=600, verbose=False):
         Thread.__init__(self, name="MockEyeTracker", daemon=True)
         self.verbose = verbose
@@ -29,8 +29,8 @@ class MockEyeTracker(Thread):
         self.should_stop = False
 
     def subscribe_to(self, id, callback, as_dictionary=True):
-        if id not in MockEyeTracker.KNOWN_DATA_IDS:
-            raise ValueError("Unknown data type")
+        if id not in KNOWN_DATA_IDS:
+            raise ValueError(f"Unknown data type: {id}")
 
         if callback is None:
             raise ValueError("Callback cannot be None")
@@ -38,8 +38,8 @@ class MockEyeTracker(Thread):
         self.callbacks[id] = callback
 
     def unsubscribe_from(self, id, callback):
-        if id not in MockEyeTracker.KNOWN_DATA_IDS:
-            raise ValueError("Unknown data type")
+        if id not in KNOWN_DATA_IDS:
+            raise ValueError(f"Unknown data type: {id}")
 
         if callback is None:
             raise ValueError("Callback cannot be None")
@@ -64,8 +64,8 @@ class MockEyeTracker(Thread):
                 x = self.curr_x
                 y = self.curr_y
 
-                if MockEyeTracker.EYETRACKER_GAZE_DATA in self.callbacks:
-                    self.callbacks[MockEyeTracker.EYETRACKER_GAZE_DATA](
+                if EYETRACKER_GAZE_DATA in self.callbacks:
+                    self.callbacks[EYETRACKER_GAZE_DATA](
                         {
                             "device_time_stamp": eta_utils.get_timestamp(),
                             "system_time_stamp": eta_utils.get_timestamp(),

@@ -7,14 +7,9 @@ import dash
 import datetime
 import numpy as np
 import pandas as pd
-from EyeTrackerAnalyzer import WARN, MESSAGE_QUEUE, __version__
-try:
-    from EyeTrackerAnalyzer.components.window import run_validation_window
-    from EyeTrackerAnalyzer.components.tobii import Tobii
-except ModuleNotFoundError:
-    WARN.generate_warning(
-        "Without tobii_research & PyQt6 library, Validation of eye-tracker won't work.",
-        category=UserWarning)
+from EyeTrackerAnalyzer import WARN, __version__
+from EyeTrackerAnalyzer.components.window import run_validation_window
+from EyeTrackerAnalyzer.components.track import Tracker
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
 import plotly.express as px
@@ -26,7 +21,7 @@ def run_async_function(async_func):
     loop.close()
 
 def run_tobii():
-    tobii_process = Tobii(save_data=True, verbose=True)
+    tobii_process = Tracker(save_data=True, verbose=True)
     tobii_process.start_tracking(duration=10)
 
 app = dash.Dash(

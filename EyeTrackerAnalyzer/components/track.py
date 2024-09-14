@@ -3,15 +3,17 @@ import sys
 import datetime
 import os
 import json
+import time
 
 from mne_lsl import lsl
+import EyeTrackerAnalyzer.components.mock as eta_mock
+import EyeTrackerAnalyzer.components.utils as eta_utils
 try:
     import tobii_research as tr
 except ModuleNotFoundError:
     print("Without tobii_research library, Tobii eye-tracker won't work.")
 import numpy as np
-from EyeTrackerAnalyzer.components.mock import MockEyeTracker
-import EyeTrackerAnalyzer.components.utils as eta_utils
+
 
 class Tracker:
     def __init__(self, data_rate=600, use_mock=False, screen_nans=True, verbose=False, save_data=False):
@@ -21,28 +23,35 @@ class Tracker:
         self.verbose = verbose
         self.save_data = save_data
         self.gaze_data = []
+        self.gaze_id = None
         
-        if use_mock:
-            print("Using a mock service.")
-            self.eyetracker = MockEyeTracker(data_rate=self.data_rate, verbose=self.verbose)
-            self.eyetracker.start()
-        else:
-            print("Using tobii to find eyetrackers.")
-            self.eyetrackers = tr.find_all_eyetrackers()
-            self.eyetracker = self.eyetrackers[0] if self.eyetrackers else None
-            if self.eyetracker:
-                print(f"Screen Resolution: {self.screen_width}x{self.screen_height}")
-                print(f"Address: {self.eyetracker.address}")
-                print(f"Model: {self.eyetracker.model}")
-                print(f"Name: {self.eyetracker.device_name}")
-                print(f"Serial number: {self.eyetracker.serial_number}")
+        try:
+            if use_mock:
+                print("Using a mock service.")
+                self.gaze_id = eta_mock.EYETRACKER_GAZE_DATA
+                
+                self.eyetracker = eta_mock.MockEyeTracker(data_rate=self.data_rate, verbose=self.verbose)
+                self.eyetracker.start()
             else:
-                raise ValueError("No eye tracker device found.")
+                print("Using tobii to find eyetrackers.")
+                self.gaze_id = tr.EYETRACKER_GAZE_DATA
+                self.eyetrackers = tr.find_all_eyetrackers()
+                self.eyetracker = self.eyetrackers[0] if self.eyetrackers else None
+                if self.eyetracker:
+                    print(f"Screen Resolution: {self.screen_width}x{self.screen_height}")
+                    print(f"Address: {self.eyetracker.address}")
+                    print(f"Model: {self.eyetracker.model}")
+                    print(f"Name: {self.eyetracker.device_name}")
+                    print(f"Serial number: {self.eyetracker.serial_number}")
+                else:
+                    raise ValueError("No eye tracker device found.")
+        except Exception as e:
+            raise ValueError(f"Error initializing the eye tracker: {e}")
 
         info = lsl.StreamInfo(
             name='tobii_gaze',
             stype='Gaze',
-            n_channels=10,
+            n_channels=11,
             sfreq=self.data_rate,
             dtype='float64',
             source_id=self.eyetracker.serial_number)
@@ -85,9 +94,9 @@ class Tracker:
         if self.eyetracker:
             try:
                 print("Starting tracking...")
-                self.eyetracker.subscribe_to(self.eyetracker.EYETRACKER_GAZE_DATA, self._collect_gaze_data, as_dictionary=True)
+                self.eyetracker.subscribe_to(self.gaze_id, self._collect_gaze_data, as_dictionary=True)
                 while True:
-                    continue
+                    time.sleep(1)
             except KeyboardInterrupt:
                 self.stop_tracking()
             finally:
@@ -109,7 +118,7 @@ class Tracker:
         try:
             if self.eyetracker:
                 print("Stopping tracking...")
-                self.eyetracker.unsubscribe_from(self.eyetracker.EYETRACKER_GAZE_DATA, self._collect_gaze_data)
+                self.eyetracker.unsubscribe_from(self.gaze_id, self._collect_gaze_data)
             else:
                 print("No eye tracker found!")
         except Exception as e:
