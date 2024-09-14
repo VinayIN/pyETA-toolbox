@@ -1,0 +1,115 @@
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import plotly.graph_objs as go
+import pylsl
+import numpy as np
+import time
+
+class OneEuroFilter:
+    def __init__(self, t0, x0, dx0=0.0, min_cutoff=1.0, beta=0.0, d_cutoff=1.0):
+        self.min_cutoff = float(min_cutoff)
+        self.beta = float(beta)
+        self.d_cutoff = float(d_cutoff)
+        self.x_prev = float(x0)
+        self.dx_prev = float(dx0)
+        self.t_prev = float(t0)
+
+    def __call__(self, t, x):
+        t_e = t - self.t_prev
+
+        # The filtered derivative of the signal.
+        a_d = self.smoothing_factor(t_e, self.d_cutoff)
+        dx = (x - self.x_prev) / t_e
+        dx_hat = self.exponential_smoothing(a_d, dx, self.dx_prev)
+
+        # The filtered signal.
+        cutoff = self.min_cutoff + self.beta * abs(dx_hat)
+        a = self.smoothing_factor(t_e, cutoff)
+        x_hat = self.exponential_smoothing(a, x, self.x_prev)
+
+        # Memorize the previous values.
+        self.x_prev = x_hat
+        self.dx_prev = dx_hat
+        self.t_prev = t
+
+        return x_hat
+
+    def smoothing_factor(self, t_e, cutoff):
+        r = 2 * np.pi * cutoff * t_e
+        return r / (r + 1)
+
+    def exponential_smoothing(self, a, x, x_prev):
+        return a * x + (1 - a) * x_prev
+
+# Initialize the Dash app
+app = dash.Dash(__name__)
+
+# Define the layout
+app.layout = html.Div([
+    dcc.Graph(id='live-graph', animate=True),
+    dcc.Interval(
+        id='graph-update',
+        interval=1000,  # in milliseconds
+        n_intervals=0
+    )
+])
+
+# Initialize data storage
+data_storage = {
+    'timestamps': [],
+    'left_x': [],
+    'left_y': [],
+    'right_x': [],
+    'right_y': []
+}
+
+# Initialize 1€ filters
+t0 = time.time()
+filters = {
+    'left_x': OneEuroFilter(t0, 0.0, min_cutoff=0.5, beta=0.5),
+    'left_y': OneEuroFilter(t0, 0.0, min_cutoff=0.5, beta=0.5),
+    'right_x': OneEuroFilter(t0, 0.0, min_cutoff=0.5, beta=0.5),
+    'right_y': OneEuroFilter(t0, 0.0, min_cutoff=0.5, beta=0.5)
+}
+
+# Set up LSL inlet
+streams = pylsl.resolve_stream('name', 'YourStreamName')  # Replace with your actual stream name
+inlet = pylsl.StreamInlet(streams[0])
+
+@app.callback(Output('live-graph', 'figure'),
+              Input('graph-update', 'n_intervals'))
+def update_graph_scatter(n):
+    # Receive data from LSL stream
+    sample, timestamp = inlet.pull_sample(timeout=0.0)
+    if sample is not None:
+        t = time.time()
+        data_storage['timestamps'].append(t)
+        data_storage['left_x'].append(filters['left_x'](t, sample[0]))
+        data_storage['left_y'].append(filters['left_y'](t, sample[1]))
+        data_storage['right_x'].append(filters['right_x'](t, sample[3]))
+        data_storage['right_y'].append(filters['right_y'](t, sample[4]))
+
+    # Keep only the last 100 points
+    for key in data_storage:
+        data_storage[key] = data_storage[key][-100:]
+
+    # Create the graph
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=data_storage['timestamps'], y=data_storage['left_x'],
+                             mode='lines+markers', name='Left Eye X'))
+    fig.add_trace(go.Scatter(x=data_storage['timestamps'], y=data_storage['left_y'],
+                             mode='lines+markers', name='Left Eye Y'))
+    fig.add_trace(go.Scatter(x=data_storage['timestamps'], y=data_storage['right_x'],
+                             mode='lines+markers', name='Right Eye X'))
+    fig.add_trace(go.Scatter(x=data_storage['timestamps'], y=data_storage['right_y'],
+                             mode='lines+markers', name='Right Eye Y'))
+
+    fig.update_layout(title='Eye Gaze Positions (Smoothed)',
+                      xaxis_title='Timestamp',
+                      yaxis_title='Position')
+
+    return fig
+
+if __name__ == '__main__':
+    app.run_server(debug=True)

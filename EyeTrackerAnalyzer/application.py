@@ -3,7 +3,6 @@ import os
 import re
 import asyncio
 import multiprocessing
-import subprocess
 import signal
 import dash
 import datetime
@@ -59,23 +58,29 @@ app.layout = dbc.Container([
             ])),
         dbc.Col(
                 [
-                    dbc.Col(
+                    dbc.Row(
                         [
-                            dbc.Row(dash.dcc.RadioItems(options=[{"label": " mock", "value": "mock"}, {"label": " eye-tracker", "value": "eye-tracker"}], value='mock', id="tracker-type")),
-                            dbc.Row(dbc.Label("Data Rate (Hz)", width="auto")),
-                            dbc.Row(dash.dcc.Slider(min=0, max=800, value=600, id="tracker-data-rate")),
-                            dbc.Row(dash.dcc.Checklist(
-                                options=[
-                                    {"label": " push to stream (tobii_gaze)", "value": "push_stream"},
-                                    {"label": " dont provide screen NaN (default: 0)", "value": "dont_screen_nans"},
-                                    {"label": " verbose", "value": "verbose"}
-                                ],
-                                value=["push_stream", "dont_screen_nans"], id="tracker-extra-options")),
-                            dbc.Row([
-                                dbc.Col(dbc.Button("Start - lsl Stream", color="primary", disabled=False, outline=True, id="start-lsl-stream"), width="auto"),
-                                dbc.Col(dbc.Button("Stop - lsl Stream", color="danger", disabled=False, outline=True, id="stop-lsl-stream"), width="auto")
-                            ])
-                        ], className="my-2"),
+                            dbc.Col(
+                                [
+                                    dbc.Row(dash.dcc.RadioItems(options=[{"label": " Mock", "value": "mock"}, {"label": " Eye-Tracker", "value": "eye-tracker"}], value='mock', id="tracker-type")),
+                                    dbc.Row(dbc.Label("Data Rate (Hz)", width="auto")),
+                                    dbc.Row(dash.dcc.Slider(min=0, max=800, value=600, id="tracker-data-rate")),
+                                    dbc.Row(dash.dcc.Checklist(
+                                        options=[
+                                            {"label": " Push to stream (tobii_gaze)", "value": "push_stream"},
+                                            {"label": " Remove screen NaN (default: 0)", "value": "dont_screen_nans"},
+                                            {"label": " Verbose", "value": "verbose"}
+                                        ],
+                                        value=["push_stream", "dont_screen_nans"], id="tracker-extra-options"))
+                                ]
+                            ),
+                            dbc.Col(
+                                [
+                                    dbc.Row(dbc.Button("Start - lsl Stream", color="primary", disabled=False, outline=True, id="start-lsl-stream"), class_name="my-4"),
+                                    dbc.Row(dbc.Button("Stop - lsl Stream", color="danger", disabled=False, outline=True, id="stop-lsl-stream"), class_name="my-4")
+                                ], class_name="align-self-center")
+                        ]
+                    ),
                     dash.html.Hr(),
                     dbc.Row([dbc.Button("Validate Eye Tracker", color="secondary", disabled=False, outline=True, id="open-grid-window")], className='my-4')
                 ]),
@@ -157,7 +162,7 @@ def start_lsl_stream(n_clicks, tracker_type, data_rate, extra_options):
 
 @app.callback(
     Output("stop-lsl-stream", "n_clicks"),
-    [Input("stop-lsl-stream", "n_clicks"), dash.State("start-lsl-stream", "value")])
+    [Input("stop-lsl-stream", "n_clicks"), Input("start-lsl-stream", "value")])
 def stop_lsl_stream(n_clicks, pid):
     if n_clicks and pid:
         try:
