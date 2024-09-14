@@ -1,6 +1,7 @@
 import warnings
 import sys
 import platform
+import datetime
 from typing import List, Optional
 import PyQt6.QtWidgets as qtw
 
@@ -20,6 +21,9 @@ def get_system_info():
     machine = platform.machine()
     width, height = get_current_screen_size()
     return f"{node}_{system}_{machine}_{width}x{height}"
+
+def get_timestamp():
+    return datetime.datetime.now().timestamp()
 
 class WarningGenerator:
     def __init__(self, filter_categories: Optional[List]=None):

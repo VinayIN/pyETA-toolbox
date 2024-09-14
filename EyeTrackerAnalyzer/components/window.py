@@ -6,7 +6,7 @@ import random
 import datetime
 import json
 import os
-from EyeTrackerAnalyzer.components.utils import get_system_info, get_current_screen_size
+import EyeTrackerAnalyzer.components.utils as eta_utils
 
 class ValidationWindow(qtw.QMainWindow):
     def __init__(self):
@@ -43,7 +43,7 @@ class ValidationWindow(qtw.QMainWindow):
         self.show()
         self.animation = qtc.QPropertyAnimation(self.circle, b"pos")
         self.animation.finished.connect(self.on_animation_finished)
-        qtc.QTimer.singleShot(self.stay_duration, self.start_sequence)
+        qtc.QTimer.singleShot(self.stay_duration*3, self.start_sequence)
 
     def start_sequence(self):
         if self.circle_positions:
@@ -89,7 +89,7 @@ class ValidationWindow(qtw.QMainWindow):
     def collect_data(self):
         circle_screen_pos = self.circle.mapToGlobal(qtc.QPoint(0, 0))
         data_point = {
-            "timestamp": datetime.datetime.now().isoformat(),
+            "timestamp": eta_utils.get_timestamp(),
             "grid_position": self.current_position,
             "screen_position": (circle_screen_pos.x(), circle_screen_pos.y())
         }
@@ -99,7 +99,7 @@ class ValidationWindow(qtw.QMainWindow):
         data_path = os.path.join(os.path.dirname(__package__), "data")
         if not os.path.exists(data_path):
             os.makedirs(data_path)
-        with open(os.path.join(data_path, f"{get_system_info()}.json"), "w") as f:
+        with open(os.path.join(data_path, f"{eta_utils.get_system_info()}.json"), "w") as f:
             json.dump(
                 {
                     "screen_size": (self.screen_width, self.screen_height),

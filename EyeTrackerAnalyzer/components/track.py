@@ -5,16 +5,17 @@ import os
 import json
 
 from mne_lsl import lsl
-#import tobii_research as tr
+try:
+    import tobii_research as tr
+except ModuleNotFoundError:
+    print("Without tobii_research library, Tobii eye-tracker won't work.")
 import numpy as np
 from EyeTrackerAnalyzer.components.mock import MockEyeTracker
-from EyeTrackerAnalyzer.components.utils import get_current_screen_size
+import EyeTrackerAnalyzer.components.utils as eta_utils
 
 class Tracker:
     def __init__(self, data_rate=600, use_mock=False, screen_nans=True, verbose=False, save_data=False):
-        self.lsl_gaze_outlet = None
-        self.lsl_eye_openness_outlet = None
-        self.screen_width, self.screen_height = get_current_screen_size()
+        self.screen_width, self.screen_height = eta_utils.get_current_screen_size()
         self.data_rate = data_rate
         self.screen_nans = screen_nans
         self.verbose = verbose
@@ -29,22 +30,29 @@ class Tracker:
             print("Using tobii to find eyetrackers.")
             self.eyetrackers = tr.find_all_eyetrackers()
             self.eyetracker = self.eyetrackers[0] if self.eyetrackers else None
-        if self.eyetracker:
-            print(f"Screen Resolution: {self.screen_width}x{self.screen_height}")
-            print(f"Address: {self.eyetracker.address}")
-            print(f"Model: {self.eyetracker.model}")
-            print(f"Name: {self.eyetracker.device_name}")
-            print(f"Serial number: {self.eyetracker.serial_number}")
-        else:
-            print("No eye tracker device found.")
-        print("\n\nPress Ctrl+C to stop tracking...")
+            if self.eyetracker:
+                print(f"Screen Resolution: {self.screen_width}x{self.screen_height}")
+                print(f"Address: {self.eyetracker.address}")
+                print(f"Model: {self.eyetracker.model}")
+                print(f"Name: {self.eyetracker.device_name}")
+                print(f"Serial number: {self.eyetracker.serial_number}")
+            else:
+                raise ValueError("No eye tracker device found.")
 
-    def get_timestamp(self):
-        return datetime.datetime.now().isoformat()
+        info = lsl.StreamInfo(
+            name='tobii_gaze',
+            stype='Gaze',
+            n_channels=10,
+            sfreq=self.data_rate,
+            dtype='float64',
+            source_id=self.eyetracker.serial_number)
+        self.lsl_gaze_outlet = lsl.StreamOutlet(info)
+        print("\n\nPress Ctrl+C to stop tracking...")
     
     def _collect_gaze_data(self, gaze_data):
         data = {
-            "timestamp": self.get_timestamp(),
+            "timestamp": eta_utils.get_timestamp(),
+            "device_time_stamp": gaze_data.get("device_time_stamp"),
             "left_eye": {
                 "gaze_point": gaze_data.get("left_gaze_point_on_display_area"),
                 "pupil_diameter": gaze_data.get("left_pupil_diameter")
@@ -54,40 +62,30 @@ class Tracker:
                 "pupil_diameter": gaze_data.get("right_pupil_diameter")
             }
         }
+        self.lsl_gaze_outlet.push_sample(
+            np.array([
+                data["left_eye"]["gaze_point"][0] if data["left_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
+                data["left_eye"]["gaze_point"][1] if data["left_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
+                data["left_eye"]["pupil_diameter"] if data["left_eye"]["pupil_diameter"] else 0 if self.screen_nans else np.nan,
+                data["right_eye"]["gaze_point"][0] if data["right_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
+                data["right_eye"]["gaze_point"][1] if data["right_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
+                data["right_eye"]["pupil_diameter"] if data["right_eye"]["pupil_diameter"] else 0 if self.screen_nans else np.nan,
+                self.screen_width,
+                self.screen_height,
+                data["timestamp"],
+                data["device_time_stamp"],
+                lsl.local_clock()
+            ], dtype=np.float64)
+        )
+        if self.save_data: self.gaze_data.append(data)
         if self.verbose: print(f'L: {data["left_eye"]["gaze_point"]}, R: {data["right_eye"]["gaze_point"]}')
-    
-    def _append_gaze_data(self, gaze_data):
-        data = {
-            "timestamp": self.get_timestamp(),
-            "left_eye": {
-                "gaze_point": gaze_data.get("left_gaze_point_on_display_area"),
-                "pupil_diameter": gaze_data.get("left_pupil_diameter")
-            },
-            "right_eye": {
-                "gaze_point": gaze_data.get("right_gaze_point_on_display_area"),
-                "pupil_diameter": gaze_data.get("right_pupil_diameter")
-            },
-        }
-        if self.verbose: print(f'L: {data["left_eye"]["gaze_point"]}, R: {data["right_eye"]["gaze_point"]}')
-        self.gaze_data.append(data)
-
-    def setup_streams(self):
-        info = lsl.StreamInfo(
-            name='tobii_gaze',
-            stype='Gaze',
-            n_channels=14,
-            sfreq=self.data_rate,
-            dtype='float64',
-            source_id=self.eyetracker.serial_number)
-        self.lsl_gaze_outlet = lsl.StreamOutlet(info)
 
     def start_tracking(self):
         """Starts tracking continuously and saves the data to a file, if save_data flag is set to True during initialization."""
-        callback_func = self._append_gaze_data if self.save_data else self._collect_gaze_data
         if self.eyetracker:
             try:
                 print("Starting tracking...")
-                self.eyetracker.subscribe_to(self.eyetracker.EYETRACKER_GAZE_DATA, callback_func, as_dictionary=True)
+                self.eyetracker.subscribe_to(self.eyetracker.EYETRACKER_GAZE_DATA, self._collect_gaze_data, as_dictionary=True)
                 while True:
                     continue
             except KeyboardInterrupt:
@@ -108,11 +106,10 @@ class Tracker:
             print("No eye tracker found!")
 
     def stop_tracking(self):
-        callback_func = self._append_gaze_data if self.save_data else self._collect_gaze_data
         try:
             if self.eyetracker:
                 print("Stopping tracking...")
-                self.eyetracker.unsubscribe_from(self.eyetracker.EYETRACKER_GAZE_DATA, callback_func)
+                self.eyetracker.unsubscribe_from(self.eyetracker.EYETRACKER_GAZE_DATA, self._collect_gaze_data)
             else:
                 print("No eye tracker found!")
         except Exception as e:

@@ -4,7 +4,7 @@ import argparse
 import time
 from threading import Thread
 from pynput import mouse
-from EyeTrackerAnalyzer.components.utils import get_current_screen_size
+import EyeTrackerAnalyzer.components.utils as eta_utils
 
 class MockEyeTracker(Thread):
     EYETRACKER_GAZE_DATA = 'mock_gaze_data'
@@ -18,7 +18,7 @@ class MockEyeTracker(Thread):
         self.verbose = verbose
         self.data_rate = data_rate
         self.listener = None
-        self.screen_width, self.screen_height = get_current_screen_size()
+        self.screen_width, self.screen_height = eta_utils.get_current_screen_size()
         self.address ="ZA03046BINAY2024"
         self.model = "ZA03046BINAY2024"
         self.device_name = "Mock Tracker"
@@ -27,9 +27,6 @@ class MockEyeTracker(Thread):
         self.curr_x = 0.0
         self.curr_y = 0.0
         self.should_stop = False
-    
-    def get_timestamp(self):
-        return datetime.datetime.now().isoformat()
 
     def subscribe_to(self, id, callback, as_dictionary=True):
         if id not in MockEyeTracker.KNOWN_DATA_IDS:
@@ -41,6 +38,12 @@ class MockEyeTracker(Thread):
         self.callbacks[id] = callback
 
     def unsubscribe_from(self, id, callback):
+        if id not in MockEyeTracker.KNOWN_DATA_IDS:
+            raise ValueError("Unknown data type")
+
+        if callback is None:
+            raise ValueError("Callback cannot be None")
+        
         if id in self.callbacks:
             del self.callbacks[id]
 
@@ -64,8 +67,8 @@ class MockEyeTracker(Thread):
                 if MockEyeTracker.EYETRACKER_GAZE_DATA in self.callbacks:
                     self.callbacks[MockEyeTracker.EYETRACKER_GAZE_DATA](
                         {
-                            "device_time_stamp": self.get_timestamp(),
-                            "system_time_stamp": self.get_timestamp(),
+                            "device_time_stamp": eta_utils.get_timestamp(),
+                            "system_time_stamp": eta_utils.get_timestamp(),
                             'left_gaze_point_on_display_area': [x, y],
                             'left_gaze_point_validity': random.uniform(0, 1) > 0.5,
                             'right_gaze_point_on_display_area': [x, y],
@@ -75,7 +78,6 @@ class MockEyeTracker(Thread):
                             'right_pupil_diameter': 8.0 + 4 * random.uniform(-1, 1),
                             'right_pupil_validity': random.uniform(0, 1) > 0.5
                         })
-                    if self.verbose: print(f"{x}, {y}")
             lis.join()
 
     def stop(self):
