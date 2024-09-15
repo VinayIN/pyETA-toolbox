@@ -23,13 +23,14 @@ class Tracker:
         self.screen_nans = screen_nans
         self.verbose = verbose
         self.save_data = save_data
+        self.use_mock = use_mock
         self.push_stream = push_stream
         self.gaze_data = []
         self.gaze_id = None
         self.lsl_gaze_outlet = None
         
         try:
-            if use_mock:
+            if self.use_mock:
                 print("Using a mock service.")
                 self.gaze_id = eta_mock.EYETRACKER_GAZE_DATA
                 
@@ -58,8 +59,9 @@ class Tracker:
                 n_channels=11,
                 sfreq=self.data_rate,
                 dtype='float64',
-                source_id=self.eyetracker.serial_number)
+                source_id='uid001_eyetracker')
             self.lsl_gaze_outlet = lsl.StreamOutlet(info)
+            print(f"LSL Stream Info: {self.lsl_gaze_outlet.get_sinfo()}")
         print(f"Member Variables: {vars(self)}")
         print("\n\nPress Ctrl+C to stop tracking...")
     
@@ -93,7 +95,9 @@ class Tracker:
                 ], dtype=np.float64)
             )
         if self.save_data: self.gaze_data.append(data)
-        if self.verbose: print(f'L: {data["left_eye"]["gaze_point"]}, R: {data["right_eye"]["gaze_point"]}')
+        def multiply_tuples(t1, t2=(self.screen_width, self.screen_height)):
+            return tuple(x*y for x,y in zip(t1, t2))
+        if self.verbose: print(f'L: {multiply_tuples(data["left_eye"]["gaze_point"])}, R: {multiply_tuples(data["right_eye"]["gaze_point"])}')
 
     def start_tracking(self, duration: Optional[float]=None):
         """Starts tracking continuously and saves the data to a file, if save_data flag is set to True during initialization."""
