@@ -14,6 +14,29 @@ from EyeTrackerAnalyzer.components.track import Tracker
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
 import plotly.express as px
+import plotly.graph_objs as go
+from collections import deque
+import pylsl
+
+class Variable:
+    # Store gaze data using deques
+    max_data_points = 1000*60*2
+    times = deque(maxlen=max_data_points)
+    left_gaze_x = deque(maxlen=max_data_points)
+    left_gaze_y = deque(maxlen=max_data_points)
+
+    # Buffer for collecting data between renders
+    buffer_times = []
+    buffer_x = []
+    buffer_y = []
+
+    def refresh(self):
+        self.times.clear()
+        self.left_gaze_x.clear()
+        self.left_gaze_y.clear()
+        self.buffer_times, self.buffer_x, self.buffer_y = [], [], []
+
+var = Variable()
 
 def run_async_function(async_func):
     loop = asyncio.new_event_loop()
@@ -76,8 +99,8 @@ app.layout = dbc.Container([
                             ),
                             dbc.Col(
                                 [
-                                    dbc.Row(dbc.Button("Start - lsl Stream", color="primary", disabled=False, outline=True, id="start-lsl-stream"), class_name="my-4"),
-                                    dbc.Row(dbc.Button("Stop - lsl Stream", color="danger", disabled=False, outline=True, id="stop-lsl-stream"), class_name="my-4")
+                                    dbc.Row(dbc.Button("Start - lsl Stream", color="primary", disabled=False, outline=True, id="start_lsl_stream"), class_name="my-4"),
+                                    dbc.Row(dbc.Button("Stop - lsl Stream", color="danger", disabled=False, outline=True, id="stop_lsl_stream"), class_name="my-4")
                                 ], class_name="align-self-center")
                         ]
                     ),
@@ -130,9 +153,9 @@ def run_tracker(params):
     tracker.start_tracking()
 
 @app.callback(
-    Output("start-lsl-stream", "value"),
+    Output("start_lsl_stream", "value"),
     [
-        Input("start-lsl-stream", "n_clicks"),
+        Input("start_lsl_stream", "n_clicks"),
         Input("tracker-type", "value"),
         Input("tracker-data-rate", "value"),
         Input("tracker-extra-options", "value"),
@@ -161,8 +184,8 @@ def start_lsl_stream(n_clicks, tracker_type, data_rate, extra_options):
     return None
 
 @app.callback(
-    Output("stop-lsl-stream", "n_clicks"),
-    [Input("stop-lsl-stream", "n_clicks"), Input("start-lsl-stream", "value")])
+    Output("stop_lsl_stream", "n_clicks"),
+    [Input("stop_lsl_stream", "n_clicks"), Input("start_lsl_stream", "value")])
 def stop_lsl_stream(n_clicks, pid):
     if n_clicks and pid:
         try:
@@ -174,8 +197,8 @@ def stop_lsl_stream(n_clicks, pid):
     return 0
 
 @app.callback(
-    [Output("start-lsl-stream", "disabled"), Output("stop-lsl-stream", "disabled")],
-    [Input("start-lsl-stream", "value")]
+    [Output("start_lsl_stream", "disabled"), Output("stop_lsl_stream", "disabled")],
+    [Input("start_lsl_stream", "value")]
 )
 def update_button_states(pid):
     if pid:
@@ -198,10 +221,110 @@ def render_tab_content(active_tab, data):
         return render_metrics_tab()
     return "No tab selected"
 
+
+@app.callback(
+    Output("clear-button", "n_clicks"),
+    Input("clear-button", "n_clicks")
+    )
+def clear_variables(n_clicks):
+    if n_clicks:
+        var.refresh()
+    return n_clicks
+
 def render_gaze_tab():
-    return dbc.Container([
-            dbc.Row([dbc.Button("Fetch (Gaze points)", color="primary", outline=True, disabled=True, id="collect-gaze-point")], className='my-2')
-        ])
+    return dbc.Container(
+        dbc.Row(
+            [
+                dash.html.H1("Live Gaze Data Visualization"),
+                dbc.Col([
+                    dbc.Button('Clear Graph', color="danger", outline=True, disabled=False, id='clear-button', class_name="mx-4"),
+                    dbc.Button("Fetch (Gaze points)", color="primary", outline=True, disabled=False, id="collect_gaze_point", class_name="mx-4"),
+                ]),
+                dash.dcc.Graph(id='live-graph', animate=False),
+                dash.dcc.Interval(
+                    id='graph-update',
+                    interval=300,
+                    n_intervals=0
+                ),
+            ]))
+
+@app.callback(
+    Output("collect_gaze_point", "inlet"),
+    Input("collect_gaze_point", "n_clicks")
+)
+def fetch_gaze_stream(n_clicks):
+    if n_clicks:
+        var.refresh()
+        try:
+            print("fetching stream")
+            streams = pylsl.resolve_streams(wait_time=1)
+            inlet = pylsl.StreamInlet(streams[0])
+            print(f"Connected to stream: {inlet.info().name()}")
+            if inlet.info().name() != "tobii_gaze":
+                print("Invalid stream name. Expected: tobii_gaze")
+                return None
+        except Exception:
+            print("No stream found.")
+            return None
+        return inlet
+    return None
+
+@app.callback(
+    Output('live-graph', 'figure'),
+    [Input("collect_gaze_point", "inlet")],
+)
+def update_gaze_graph(inlet):
+    fig = go.Figure()
+    while True:
+        if inlet is None:
+            return fig
+        sample, _ = inlet.pull_sample(timeout=0.0)
+        if sample is None:
+            break
+
+        current_time = datetime.datetime.fromtimestamp(sample[8])
+        screen_width = sample[6]
+        screen_height = sample[7]
+        gaze_x = int(sample[0] * screen_width)
+        gaze_y = int(sample[1] * screen_height)
+
+        var.buffer_times.append(current_time)
+        var.buffer_x.append(gaze_x)
+        var.buffer_y.append(gaze_y)
+
+    var.times.extend(var.buffer_times)
+    var.left_gaze_x.extend(var.buffer_x)
+    var.left_gaze_y.extend(var.buffer_y)
+    var.buffer_times, var.buffer_x, var.buffer_y = [], [], []
+
+    fig.add_trace(go.Scatter(
+        x=list(var.times),
+        y=list(var.left_gaze_x),
+        mode='lines',
+        name='Gaze X'
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=list(var.times),
+        y=list(var.left_gaze_y),
+        mode='lines',
+        name='Gaze Y'
+    ))
+
+    fig.update_layout(
+        title='Eye Gaze Data Over Time',
+        xaxis=dict(
+            title='Timestamp',
+            range=[min(var.times), max(var.times)],
+            type='date'
+        ),
+        yaxis=dict(
+            title='Gaze Position',
+            range=[0, max(screen_height, screen_width)]
+        ),
+        showlegend=True
+    )
+    return fig
 
 def render_fixation_tab():
     return dbc.Container([
@@ -248,29 +371,6 @@ def update_dropdown(gaze_data):
         dbc.Col(f"Timestamp: {ts_gaze_data}")
     ])
 
-def get_confusion_matrix_metric(matrix):
-
-    num_classes = matrix.shape[0]
-    accuracy = 0.0
-    precision = np.zeros(num_classes)
-    recall = np.zeros(num_classes)
-    f1_score = np.zeros(num_classes)
-
-    # Calculate metrics for each class
-    for i in range(num_classes):
-        tp = matrix[i, i]
-        fp = np.sum(matrix[:, i]) - tp
-        fn = np.sum(matrix[i, :]) - tp
-        tn = np.sum(matrix) - tp - fp - fn
-
-        precision[i] = tp / (tp + fp) if tp + fp > 0 else 0
-        recall[i] = tp / (tp + fn) if tp + fn > 0 else 0
-        f1_score[i] = 2 * precision[i] * recall[i] / (precision[i] + recall[i]) if precision[i] + recall[i] > 0 else 0
-
-    accuracy = np.trace(matrix) / np.sum(matrix)
-
-    return {'accuracy': accuracy, 'precision': precision, 'recall': recall, 'f1_score': f1_score}
-
 @app.callback(
     Output('graph-output', 'children'),
     [Input('analyze-button', 'n_clicks')],
@@ -279,61 +379,9 @@ def get_confusion_matrix_metric(matrix):
 )
 def update_graph(n_clicks, gaze_data, validation_data):
     if n_clicks:
-        matrix = np.array([
-            [10, 2, 3, 1, 0, 1, 2, 1, 0],
-            [1, 15, 2, 0, 2, 0, 1, 0, 1],
-            [2, 1, 12, 2, 0, 1, 1, 0, 1],
-            [0, 0, 1, 18, 0, 2, 0, 0, 1],
-            [1, 2, 0, 0, 16, 0, 1, 0, 1],
-            [0, 1, 2, 1, 0, 17, 1, 0, 1],
-            [2, 0, 1, 0, 1, 1, 15, 0, 1],
-            [0, 0, 0, 0, 0, 0, 0, 20, 0],
-            [0, 1, 1, 1, 1, 1, 1, 0, 15]
-        ])
-
-        normalized_matrix = matrix / np.sum(matrix, axis=1, keepdims=True)
-        normalized_matrix = np.round(normalized_matrix, decimals=2)
-        metric = get_confusion_matrix_metric(normalized_matrix)
-        labels = ["1","2","3","4","5","6","7","8","9"]
-        
-        # Create a DataFrame for the confusion matrix
-        metric_df = pd.DataFrame.from_dict(metric)
-        df = pd.DataFrame(normalized_matrix, index=labels, columns=labels)
-        df = df.reset_index().melt(id_vars='index')
-        df.columns = ['Validation', 'Gaze', 'Value']
-        
-        fig = px.imshow(
-            normalized_matrix,
-            x=labels,
-            y=labels,
-            color_continuous_scale='Blues',
-            labels=dict(x="Gaze", y="Validation", color="Value"),
-            text_auto=True)
-        
-        fig.update_layout(
-            title='Validation Data Vs Gaze Data',
-            xaxis=dict(side='top')
-        )
-
-        
-        metric_fig = px.bar(
-            metric,
-            x=labels,
-            y=metric_df.columns.drop(["accuracy"], errors="ignore"),
-            barmode="group",
-            labels={"x": "Class", "y": "Value"},
-            title='Precision, Recall, and F1-Score')
-
-        return dbc.Container([
-            dash.dcc.Graph(figure=fig, className="metric-grid"),
-            dash.dcc.Graph(figure=metric_fig, className="metric-values"),
-            dash.dcc.Markdown(
-                f'''
-                Accuracy: `{metric.get('accuracy')}`
-                '''
-            ),
-        ])
+        pass
     return dash.html.Div()
+
 
 if __name__ == '__main__':
     app.run(debug=True)
