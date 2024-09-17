@@ -8,8 +8,19 @@ dash = "*"
 flask = "*"
 dash-bootstrap-components = "*"
 pyqt6 = "*"
+pylsl = "*"
+numpy = "*"
+mne = "*"
+mne-lsl = "*"
+platformdirs = "*"
+pynput = "*"
+pandas = "*"
+seaborn = "*"
 
 [dev-packages]
+pytest = "*"
+pytest-asyncio = "*"
+ipykernel = "*"
 
 [requires]
 python_version = "3.11"
