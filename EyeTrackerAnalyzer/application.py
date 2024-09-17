@@ -47,11 +47,25 @@ def run_async_function(async_func):
 
 app = dash.Dash(
     __package__,
-    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME],
     suppress_callback_exceptions=True)
 
 app.layout = dbc.Container([
-    dash.html.H1("Eye Tracker Analyzer", className="text-center my-4"),
+    dbc.Row(
+        [
+            dbc.Col(dash.html.H1("Eye Tracker Analyzer")),
+            dbc.Col(
+                dbc.ButtonGroup(
+                    [
+                        dbc.Button("Home", href="/", color="secondary", outline=True, class_name="my-2"),
+                        dbc.Button("Docs", href="/docs", color="secondary", outline=True),
+                    ],
+                    class_name="float-end",
+                    vertical=True)),
+        ],
+        align="center",
+        class_name="my-4"
+    ),
     dash.html.Hr(),
     dbc.Row([
         dbc.Col(
@@ -59,7 +73,6 @@ app.layout = dbc.Container([
                 dash.dcc.Markdown(
                     f'''
                     version: `{__version__}`
-
 
                     This interface allows you to validate the eye tracker accuracy along with the following:
                     - View gaze points
@@ -77,7 +90,7 @@ app.layout = dbc.Container([
                                 [
                                     dbc.Row(dash.dcc.RadioItems(options=[{"label": " Mock", "value": "mock"}, {"label": " Eye-Tracker", "value": "eye-tracker"}], value='mock', id="tracker-type")),
                                     dbc.Row(dbc.Label("Data Rate (Hz)", width="auto")),
-                                    dbc.Row(dash.dcc.Slider(min=0, max=800, value=600, id="tracker-data-rate")),
+                                    dbc.Row(dash.dcc.Slider(min=0, step=100, max=800, value=600, id="tracker-data-rate")),
                                     dbc.Row(dash.dcc.Checklist(
                                         options=[
                                             {"label": " Push to stream (tobii_gaze)", "value": "push_stream"},
@@ -89,10 +102,14 @@ app.layout = dbc.Container([
                                 ]
                             ),
                             dbc.Col(
-                                [
-                                    dbc.Row(dbc.Button("Start - lsl Stream", color="primary", disabled=False, outline=True, id="start_lsl_stream"), class_name="my-4"),
-                                    dbc.Row(dbc.Button("Stop - lsl Stream", color="danger", disabled=False, outline=True, id="stop_lsl_stream"), class_name="my-4")
-                                ], class_name="align-self-center")
+                                dbc.ButtonGroup(
+                                    [
+                                        dbc.Button("Start - lsl Stream", color="primary", disabled=False, outline=True, id="start_lsl_stream"),
+                                        dbc.Button("Stop - lsl Stream", color="danger", disabled=False, outline=True, id="stop_lsl_stream")
+                                    ], vertical=True),
+                                class_name="align-self-center",
+                                width="auto"
+                                )
                         ]
                     ),
                     dash.html.Hr(),
@@ -114,7 +131,7 @@ app.layout = dbc.Container([
             ],
             delay_show=100,
         ),
-])
+], fluid=True, class_name="p-4")
 
 
 @app.callback(
@@ -236,11 +253,11 @@ def render_tab(tab_type):
     return dbc.Container([
         dbc.Row([
             dash.html.H3(f"Live Visualization: {tab_type.capitalize()} points"),
-            dbc.Button("Fetch tobii_gaze Stream", color="info", disabled=False, outline=True, id="fetch_stream", class_name="my-2"),
-            dbc.Col([
-                dbc.Button('Clear/Refresh', color="danger", outline=True, id="clear-button", class_name="mx-4"),
-                dbc.Button(f"Load ({tab_type.capitalize()} Visualization)", color="primary", outline=True, id=f"collect_{tab_type}_points", class_name="mx-4"),
-            ], class_name="my-4"),
+            dbc.ButtonGroup([
+                dbc.Button("Fetch tobii_gaze Stream", color="info", disabled=False, outline=True, id="fetch_stream"),
+                dbc.Button(f"Load ({tab_type.capitalize()} Visualization)", color="primary", outline=True, id=f"collect_{tab_type}_points"),
+                dbc.Button('Clear/Refresh', color="danger", outline=True, id="clear-button"),
+            ], class_name="my-2"),
             dash.html.Hr(),
             dash.html.Div(id=f'live-graph-{tab_type}'),
             dash.dcc.Interval(id=f'graph_update_{tab_type}', interval=300, n_intervals=0),
@@ -346,8 +363,12 @@ def update_graph_gaze(n_clicks, inlet):
             )
             return fig
         print("update_graph_gaze")
-        return dash.dcc.Markdown("Did you start `lsl stream`?/ clicked the button `Fetch tobii_gaze stream`?")
-    return dash.dcc.Markdown("Click the button to load the graph")
+        return dbc.Alert(
+            "Did you start `lsl stream`?/ clicked the button `Fetch tobii_gaze stream`?",
+            color="danger", dismissable=True)
+    return dbc.Alert(
+            "Click the Load (Gaze Visualization) button to load the graph",
+            color="info", dismissable=True)
 
 def get_file_names(prefix):
     return [f for f in os.listdir('data/') if f.startswith(prefix)]
@@ -373,7 +394,8 @@ def render_metrics_tab():
         ]),
         dbc.Row([
             dash.html.Div(id='dropdown-output'),
-            dbc.Button("Analyze", color="success", disabled=False, outline=True, id="analyze-button"),
+            dbc.Button("Analyze", color="success", disabled=False, outline=True, id="analyze-button", class_name="my-4"),
+            dash.html.Hr(),
             dash.html.Div(id='graph-output')
         ])
     ])
@@ -388,8 +410,12 @@ def update_graph_fixation(n_clicks, inlet):
         if inlet is not None:
             pass
         print("update_graph_fixation")
-        return dash.dcc.Markdown("Did you start `lsl stream`?/ clicked the button `Fetch tobii_gaze stream`?")
-    return dash.dcc.Markdown("Click the button to load the graph")
+        return dbc.Alert(
+            "Did you start `lsl stream`?/ clicked the button `Fetch tobii_gaze stream`?",
+            color="danger", dismissable=True)
+    return dbc.Alert(
+            "Click the Load (Fixation Visualization) button to load the graph",
+            color="info", dismissable=True)
 
 @app.callback(
     Output('dropdown-output', 'children'),
@@ -413,7 +439,9 @@ def update_dropdown(gaze_data):
 def update_graph_metrics(n_clicks, gaze_data, validation_data):
     if n_clicks:
         pass
-    return dash.html.Div()
+    return dbc.Alert(
+                "Choose appropriate files combination to analyze the eyetracker data",
+                color="info", dismissable=True)
 
 
 if __name__ == '__main__':
