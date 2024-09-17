@@ -44,16 +44,6 @@ def run_async_function(async_func):
     loop.run_until_complete(async_func())
     loop.close()
 
-def run_tobii():
-    tobii_process = Tracker(
-        use_mock=True,
-        screen_nans=True,
-        save_data=True,
-        push_stream=False,
-        verbose=False)
-    duration = (9*(2000+1000))/1000 + (2000*3)/1000 + 2000/1000
-    print(f"Totat Duration: {duration}")
-    tobii_process.start_tracking(duration)
 
 app = dash.Dash(
     __package__,
@@ -91,6 +81,7 @@ app.layout = dbc.Container([
                                     dbc.Row(dash.dcc.Checklist(
                                         options=[
                                             {"label": " Push to stream (tobii_gaze)", "value": "push_stream"},
+                                            {"label": " Add Fixation duration", "value": "fixation"},
                                             {"label": " Remove screen NaN (default: 0)", "value": "dont_screen_nans"},
                                             {"label": " Verbose", "value": "verbose"}
                                         ],
@@ -105,6 +96,7 @@ app.layout = dbc.Container([
                         ]
                     ),
                     dash.html.Hr(),
+                    dbc.Row(dash.dcc.RadioItems(options=[{"label": " Mock", "value": "mock"}, {"label": " Eye-Tracker", "value": "eye-tracker"}], value='mock', id="validation-tracker-type")),
                     dbc.Row([dbc.Button("Validate Eye Tracker", color="secondary", disabled=False, outline=True, id="open-grid-window")], className='my-4')
                 ]),
         ],),
@@ -127,13 +119,24 @@ app.layout = dbc.Container([
 
 @app.callback(
     Output('open-grid-window', 'value'),
-    [Input('open-grid-window', 'n_clicks')]
+    [Input('open-grid-window', 'n_clicks'),
+     Input('validation-tracker-type', 'value')]
 )
-def update_window(n_clicks):
+def update_window(n_clicks, value):
     if n_clicks:
         print(f"executing: {run_validation_window.__name__}")
+        tracker_params = {
+            'data_rate': 600,
+            'use_mock': True if value == "mock" else False,
+            'fixation': False,
+            'dont_screen_nans': True,
+            'verbose': False,
+            'push_stream': False,
+            'save_data': True,
+            'duration': (9*(2000+1000))/1000 + (2000*3)/1000 + 2000/1000
+        }
         with multiprocessing.Pool(processes=2) as pool:
-            tobii_result = pool.apply_async(run_tobii)
+            tobii_result = pool.apply_async(run_tracker, args=(tracker_params,))
             validation_result = pool.apply_async(run_validation_window)
             tobii_result.get()
             validation_result.get()
@@ -142,15 +145,20 @@ def update_window(n_clicks):
     return 0
 
 def run_tracker(params):
+    duration = None
     tracker = Tracker(
         data_rate=params['data_rate'],
         use_mock=params['use_mock'],
+        fixation=params['fixation'],
         screen_nans=not params['dont_screen_nans'],
         verbose=params['verbose'],
         push_stream=params['push_stream'],
         save_data=params['save_data']
     )
-    tracker.start_tracking()
+    if params["duration"] is not None:
+        duration = params["duration"]
+        print(f"Totat Duration: {duration}")
+    tracker.start_tracking(duration=duration)
 
 @app.callback(
     Output("start_lsl_stream", "value"),
@@ -164,6 +172,7 @@ def run_tracker(params):
 def start_lsl_stream(n_clicks, tracker_type, data_rate, extra_options):
     if n_clicks:
         use_mock = True if tracker_type == "mock" else False
+        fixation = True if "fixation" in extra_options else False
         push_stream = True if "push_stream" in extra_options else False
         dont_screen_nans = True if "dont_screen_nans" in extra_options else False
         data_rate = data_rate if data_rate else 600
@@ -172,6 +181,7 @@ def start_lsl_stream(n_clicks, tracker_type, data_rate, extra_options):
         tracker_params = {
             'data_rate': data_rate,
             'use_mock': use_mock,
+            'fixation': fixation,
             'dont_screen_nans': dont_screen_nans,
             'verbose': verbose,
             'push_stream': push_stream,
@@ -212,124 +222,132 @@ def update_button_states(pid):
 def render_tab_content(active_tab, data):
     if active_tab == "eye-tracker-gaze":
         print("plotting gaze points")
-        return render_gaze_tab()
+        return render_tab(tab_type="gaze")
     elif active_tab == "eye-tracker-fixation":
         print("plotting fixation points")
-        return render_fixation_tab()
+        return render_tab(tab_type="fixation")
     elif active_tab == "eye-tracker-metrics":
         print("plotting metrics")
         return render_metrics_tab()
     return "No tab selected"
 
 
+def render_tab(tab_type):
+    return dbc.Container([
+        dbc.Row([
+            dash.html.H3(f"Live Visualization: {tab_type.capitalize()} points"),
+            dbc.Button("Fetch tobii_gaze Stream", color="info", disabled=False, outline=True, id="fetch_stream", class_name="my-2"),
+            dbc.Col([
+                dbc.Button('Clear/Refresh', color="danger", outline=True, id="clear-button", class_name="mx-4"),
+                dbc.Button(f"Load ({tab_type.capitalize()} Visualization)", color="primary", outline=True, id=f"collect_{tab_type}_points", class_name="mx-4"),
+            ], class_name="my-4"),
+            dash.html.Hr(),
+            dash.html.Div(id=f'live-graph-{tab_type}'),
+            dash.dcc.Interval(id=f'graph_update_{tab_type}', interval=300, n_intervals=0),
+        ])
+    ])
+
 @app.callback(
-    Output("clear-button", "n_clicks"),
-    Input("clear-button", "n_clicks")
-    )
-def clear_variables(n_clicks):
+    Output('clear-button', 'n_clicks'),
+    [Input('clear-button', 'n_clicks')],
+    prevent_initial_call=True
+)
+def clear_data(n_clicks):
     if n_clicks:
+        print("clear button clicked")
         var.refresh()
     return n_clicks
 
-def render_gaze_tab():
-    return dbc.Container(
-        dbc.Row(
-            [
-                dash.html.H1("Live Gaze Data Visualization"),
-                dbc.Col([
-                    dbc.Button('Clear Graph', color="danger", outline=True, disabled=False, id='clear-button', class_name="mx-4"),
-                    dbc.Button("Fetch (Gaze points)", color="primary", outline=True, disabled=False, id="collect_gaze_point", class_name="mx-4"),
-                ]),
-                dash.dcc.Graph(id='live-graph', animate=False),
-                dash.dcc.Interval(
-                    id='graph-update',
-                    interval=300,
-                    n_intervals=0
-                ),
-            ]))
+
+def get_available_stream():
+    var.refresh()
+    message = "No fetching performed"
+    try:
+        print("Fetching stream")
+        streams = pylsl.resolve_streams(wait_time=1)
+        inlet = pylsl.StreamInlet(streams[0])
+        message = f"Connected to stream: {inlet.info().name()}"
+        expected_name = "tobii_gaze"
+        if inlet.info().name() == expected_name:
+            return inlet, message
+        message = f"Invalid stream name. Expected: {expected_name}"
+        return None, message
+    except Exception as e:
+        message = f"No stream found. Error: {e}"
+    return None, message
 
 @app.callback(
-    Output("collect_gaze_point", "inlet"),
-    Input("collect_gaze_point", "n_clicks")
+    Output("fetch_stream", "value"),
+    [Input("fetch_stream", "n_clicks")],
+    prevent_initial_call=True
 )
-def fetch_gaze_stream(n_clicks):
+def get_inlet(n_clicks):
     if n_clicks:
-        var.refresh()
-        try:
-            print("fetching stream")
-            streams = pylsl.resolve_streams(wait_time=1)
-            inlet = pylsl.StreamInlet(streams[0])
-            print(f"Connected to stream: {inlet.info().name()}")
-            if inlet.info().name() != "tobii_gaze":
-                print("Invalid stream name. Expected: tobii_gaze")
-                return None
-        except Exception:
-            print("No stream found.")
-            return None
+        inlet, message = get_available_stream()
+        print(message)
         return inlet
     return None
 
+
 @app.callback(
-    Output('live-graph', 'figure'),
-    [Input("collect_gaze_point", "inlet")],
+    Output('live-graph-gaze', 'children'),
+    [Input("collect_gaze_points", "n_clicks"),
+     Input("fetch_stream", "value")],
 )
-def update_gaze_graph(inlet):
-    fig = go.Figure()
-    while True:
-        if inlet is None:
+def update_graph_gaze(n_clicks, inlet):
+    if n_clicks:
+        if inlet is not None:
+            while True:
+                sample, _ = inlet.pull_sample(timeout=0.0)
+                if sample is None:
+                    break
+
+                current_time = datetime.datetime.fromtimestamp(sample[8])
+                screen_width = sample[6]
+                screen_height = sample[7]
+                gaze_x = int(sample[0] * screen_width)
+                gaze_y = int(sample[1] * screen_height)
+
+                var.buffer_times.append(current_time)
+                var.buffer_x.append(gaze_x)
+                var.buffer_y.append(gaze_y)
+
+            var.times.extend(var.buffer_times)
+            var.left_gaze_x.extend(var.buffer_x)
+            var.left_gaze_y.extend(var.buffer_y)
+            var.buffer_times, var.buffer_x, var.buffer_y = [], [], []
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=list(var.times),
+                y=list(var.left_gaze_x),
+                mode='lines',
+                name='Gaze X'
+            ))
+
+            fig.add_trace(go.Scatter(
+                x=list(var.times),
+                y=list(var.left_gaze_y),
+                mode='lines',
+                name='Gaze Y'
+            ))
+
+            fig.update_layout(
+                title='Eye Gaze Data Over Time',
+                xaxis=dict(
+                    title='Timestamp',
+                    range=[min(var.times), max(var.times)],
+                    type='date'
+                ),
+                yaxis=dict(
+                    title='Gaze Position',
+                    range=[0, max(screen_height, screen_width)]
+                ),
+                showlegend=True
+            )
             return fig
-        sample, _ = inlet.pull_sample(timeout=0.0)
-        if sample is None:
-            break
-
-        current_time = datetime.datetime.fromtimestamp(sample[8])
-        screen_width = sample[6]
-        screen_height = sample[7]
-        gaze_x = int(sample[0] * screen_width)
-        gaze_y = int(sample[1] * screen_height)
-
-        var.buffer_times.append(current_time)
-        var.buffer_x.append(gaze_x)
-        var.buffer_y.append(gaze_y)
-
-    var.times.extend(var.buffer_times)
-    var.left_gaze_x.extend(var.buffer_x)
-    var.left_gaze_y.extend(var.buffer_y)
-    var.buffer_times, var.buffer_x, var.buffer_y = [], [], []
-
-    fig.add_trace(go.Scatter(
-        x=list(var.times),
-        y=list(var.left_gaze_x),
-        mode='lines',
-        name='Gaze X'
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=list(var.times),
-        y=list(var.left_gaze_y),
-        mode='lines',
-        name='Gaze Y'
-    ))
-
-    fig.update_layout(
-        title='Eye Gaze Data Over Time',
-        xaxis=dict(
-            title='Timestamp',
-            range=[min(var.times), max(var.times)],
-            type='date'
-        ),
-        yaxis=dict(
-            title='Gaze Position',
-            range=[0, max(screen_height, screen_width)]
-        ),
-        showlegend=True
-    )
-    return fig
-
-def render_fixation_tab():
-    return dbc.Container([
-            dbc.Row([dbc.Button("Fetch (Modified Gaze points)", outline=True, color="primary", disabled=True, id="append-gaze-point")], className='my-2')
-        ])
+        print("update_graph_gaze")
+        return dash.dcc.Markdown("Did you start `lsl stream`?/ clicked the button `Fetch tobii_gaze stream`?")
+    return dash.dcc.Markdown("Click the button to load the graph")
 
 def get_file_names(prefix):
     return [f for f in os.listdir('data/') if f.startswith(prefix)]
@@ -340,6 +358,8 @@ def render_metrics_tab():
 
     return dbc.Container([
         dbc.Row([
+            dash.html.H3("Statistics: Eye Tracker Validation"),
+            dash.html.Hr(),
             dbc.Col(dash.dcc.Dropdown(
                 id='gaze-data-dropdown',
                 options=[{'label': f, 'value': f} for f in gaze_files],
@@ -359,6 +379,19 @@ def render_metrics_tab():
     ])
 
 @app.callback(
+    Output('live-graph-fixation', 'children'),
+    [Input("collect_fixation_points", "n_clicks"),
+     Input("fetch_stream", "value")],
+)
+def update_graph_fixation(n_clicks, inlet):
+    if n_clicks:
+        if inlet is not None:
+            pass
+        print("update_graph_fixation")
+        return dash.dcc.Markdown("Did you start `lsl stream`?/ clicked the button `Fetch tobii_gaze stream`?")
+    return dash.dcc.Markdown("Click the button to load the graph")
+
+@app.callback(
     Output('dropdown-output', 'children'),
     [Input('gaze-data-dropdown', 'value')]
 )
@@ -373,11 +406,11 @@ def update_dropdown(gaze_data):
 
 @app.callback(
     Output('graph-output', 'children'),
-    [Input('analyze-button', 'n_clicks')],
-    [Input('gaze-data-dropdown', 'value'),
+    [Input('analyze-button', 'n_clicks'),
+     Input('gaze-data-dropdown', 'value'),
      Input('validation-data-dropdown', 'value')]
 )
-def update_graph(n_clicks, gaze_data, validation_data):
+def update_graph_metrics(n_clicks, gaze_data, validation_data):
     if n_clicks:
         pass
     return dash.html.Div()

@@ -9,3 +9,4 @@ __all__ = [
     'WARN',
     '__version__'
 ]
+print(f"Version: {__version__}")

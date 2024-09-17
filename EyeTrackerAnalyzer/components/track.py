@@ -17,13 +17,23 @@ import numpy as np
 
 
 class Tracker:
-    def __init__(self, data_rate=600, use_mock=False, screen_nans=True, verbose=False, push_stream=False, save_data=False):
+    def __init__(
+            self,
+            data_rate=600,
+            use_mock=False,
+            fixation=False,
+            screen_nans=True,
+            verbose=False,
+            push_stream=False,
+            save_data=False
+        ):
         self.screen_width, self.screen_height = eta_utils.get_current_screen_size()
         self.data_rate = data_rate
         self.screen_nans = screen_nans
         self.verbose = verbose
         self.save_data = save_data
         self.use_mock = use_mock
+        self.fixation = fixation
         self.push_stream = push_stream
         self.gaze_data = []
         self.gaze_id = None
@@ -53,10 +63,12 @@ class Tracker:
             raise ValueError(f"Error initializing the eye tracker: {e}")
 
         if self.push_stream:
+            n_channels = 10
+            n_channels += 1 if self.fixation else 0
             info = lsl.StreamInfo(
                 name='tobii_gaze',
                 stype='Gaze',
-                n_channels=11,
+                n_channels=n_channels,
                 sfreq=self.data_rate,
                 dtype='float64',
                 source_id='uid001_eyetracker')
@@ -78,9 +90,7 @@ class Tracker:
                 "pupil_diameter": gaze_data.get("right_pupil_diameter")
             }
         }
-        if self.push_stream:
-            self.lsl_gaze_outlet.push_sample(
-                np.array([
+        stream_data = np.array([
                     data["left_eye"]["gaze_point"][0] if data["left_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
                     data["left_eye"]["gaze_point"][1] if data["left_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
                     data["left_eye"]["pupil_diameter"] if data["left_eye"]["pupil_diameter"] else 0 if self.screen_nans else np.nan,
@@ -90,10 +100,16 @@ class Tracker:
                     self.screen_width,
                     self.screen_height,
                     data["timestamp"],
-                    data["device_time_stamp"],
                     lsl.local_clock()
                 ], dtype=np.float64)
-            )
+        if self.fixation:
+            fixation_data = {
+                "fixation_elapsed": 0.0
+            }
+            data.update(fixation_data)
+            stream_data = np.append(stream_data, data["fixation_elapsed"])
+        if self.push_stream:
+            self.lsl_gaze_outlet.push_sample(stream_data)
         if self.save_data: self.gaze_data.append(data)
         def multiply_tuples(t1, t2=(self.screen_width, self.screen_height)):
             return tuple(x*y for x,y in zip(t1, t2))
