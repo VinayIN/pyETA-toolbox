@@ -195,6 +195,8 @@ if __name__ == '__main__':
                         help="The rate of the data stream.")
     parser.add_argument("--use_mock", action="store_true",
                         help="Use this to start the mock service")
+    parser.add_argument("--fixation", action="store_true",
+                        help="Use this to add fixations duration to the data stream")
     parser.add_argument("--dont_screen_nans", action="store_true",
                         help="Use this to avoid correcting for NaNs")
     parser.add_argument("--save_data", action="store_true",
@@ -210,6 +212,7 @@ if __name__ == '__main__':
     tracker = Tracker(
         data_rate=args.data_rate,
         use_mock=args.use_mock,
+        fixation=args.fixation,
         screen_nans=not args.dont_screen_nans,
         verbose=args.verbose,
         push_stream=args.push_stream,
