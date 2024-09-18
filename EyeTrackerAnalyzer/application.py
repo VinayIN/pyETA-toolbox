@@ -29,8 +29,10 @@ class Variable:
 
     def refresh(self):
         if self.inlet:
+            print(f"Closing the stream: {self.inlet.info().name()}")
             self.inlet.close_stream()
-        self.inlet, _ = get_available_stream()
+        self.inlet, message = get_available_stream()
+        print(message)
         self.times.clear()
         self.left_gaze_x.clear()
         self.left_gaze_y.clear()
@@ -325,11 +327,13 @@ def get_available_stream():
 )
 def get_inlet(n_clicks):
     if n_clicks:
-        inlet, message = get_available_stream()
-        print(message)
-        if inlet is not None:
-            var.inlet = inlet
-            return {"inlet": var.inlet.info().name()}
+        if var.inlet is None:
+            var.inlet, message = get_available_stream()
+            name = var.inlet.info().name() if var.inlet else None
+            print(message)
+        else:
+            name = var.inlet.info().name()
+        return {"inlet": name}
     return {"inlet": None}
 
 @app.callback(
