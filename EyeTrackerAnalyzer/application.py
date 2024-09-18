@@ -48,17 +48,30 @@ def run_async_function(async_func):
 
 app = dash.Dash(
     __package__,
-    external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME],
+    external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP],
     suppress_callback_exceptions=True
 )
+app.title = "Eye Tracker Analyzer"
+app._favicon = "favicon.ico"
 
 app.layout = dbc.Container([
     dbc.Row([
-        dbc.Col(dash.html.H1("Eye Tracker Analyzer", className="my-4")),
+        dbc.Col([
+            dash.html.H1("Toolbox - Eye Tracker Analyzer", className="my-4 text-muted"),
+            dash.html.A([
+                    dbc.Badge("Faculty 1", color="secondary", class_name='me-2'),
+                    dash.html.Strong("Neuroadaptive Human-Computer Interaction", className="text-muted"),
+                    dash.html.P("Brandenburg University of Technology (Cottbus-Senftenberg)", className="text-muted")
+                ],
+                href="https://www.b-tu.de/en/fg-neuroadaptive-hci/",
+                style={"text-decoration": "none"},
+                target="_blank"
+            )
+        ]),
         dbc.Col(
             dbc.ButtonGroup([
-                dbc.Button("Home", href="/", color="secondary", outline=True),
-                dbc.Button("Docs", href="/docs", color="secondary", outline=True),
+                dbc.Button(href="/", color="secondary", outline=True, class_name="bi bi-house-door-fill"),
+                dbc.Button(href="/docs", color="secondary", outline=True, disabled=True, class_name="bi bi-book"),
             ], class_name="float-end"),
             width="auto"
         ),
@@ -82,8 +95,8 @@ app.layout = dbc.Container([
         dbc.Col([
             dbc.Card(dbc.CardBody([
                 dbc.Row([
+                    dash.html.Div(id='lsl-status'),
                     dbc.Col([
-                        dash.html.Div(id='lsl-status'),
                         dash.dcc.RadioItems(
                             options=[
                                 {"label": " Mock", "value": "mock"},
@@ -151,6 +164,15 @@ app.layout = dbc.Container([
         ],
         delay_show=100,
     ),
+    dash.html.Footer([
+        dbc.Col([
+            dash.html.A(
+                    dash.html.I(className="bi bi-github"),
+                    href="https://github.com/VinayIN/EyeTrackerAnalyzer",
+                    target="_blank"
+                ),
+        ], class_name="float-end my-4"),
+    ])
 ], fluid=True, class_name="p-4")
 
 @app.callback(
@@ -283,7 +305,7 @@ def render_tab(tab_type):
                     dash.dcc.Store(id="stream-store", data={"inlet": None}),
                     dbc.Button("Fetch tobii_gaze Stream", color="info", outline=True, id="fetch_stream"),
                     dbc.Button(f"Load ({tab_type.capitalize()} Visualization)", color="primary", outline=True, id=f"collect_{tab_type}_points"),
-                    dbc.Button('Clear/Refresh', color="danger", outline=True, id="clear-button"),
+                    dbc.Button('Clear/Refresh', color="danger", outline=True, id="clear-button", class_name="bi bi-arrow-clockwise"),
                 ], class_name="mb-4"),
                 dash.html.Div(id="stream-status"),
                 dash.html.Hr(),
@@ -385,7 +407,7 @@ def update_graph_gaze(n_clicks, data):
                 showlegend=True
             )
             return dbc.Card(dbc.CardBody([dash.dcc.Graph(figure=fig)]), class_name="mt-3")
-        return dbc.Alert("Did you start `lsl stream`?/ clicked the button `Fetch tobii_gaze stream`?",
+        return dbc.Alert("Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze stream`?",
                          color="danger", dismissable=True)
     return dbc.Alert("Click the Load (Gaze Visualization) button to load the graph",
                      color="info", dismissable=True)
@@ -433,7 +455,7 @@ def update_graph_fixation(n_clicks, inlet):
         if inlet is not None:
             pass
         return dbc.Alert(
-            "Did you start `lsl stream`?/ clicked the button `Fetch tobii_gaze stream`?",
+            "Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze stream`?",
             color="danger", dismissable=True)
     return dbc.Alert(
             "Click the Load (Fixation Visualization) button to load the graph",
