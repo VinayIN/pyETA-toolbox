@@ -20,6 +20,7 @@ from collections import deque
 import pylsl
 
 class Variable:
+    inlet = None
     max_data_points = 1000 * 60 * 2
     times = deque(maxlen=max_data_points)
     left_gaze_x = deque(maxlen=max_data_points)
@@ -27,6 +28,9 @@ class Variable:
     buffer_times, buffer_x, buffer_y = [], [], []
 
     def refresh(self):
+        if self.inlet:
+            self.inlet.close_stream()
+        self.inlet, _ = get_available_stream()
         self.times.clear()
         self.left_gaze_x.clear()
         self.left_gaze_y.clear()
@@ -231,7 +235,8 @@ def update_lsl_status(pid, stop_val):
 
 @app.callback(
     Output("stop_lsl_stream", "value"),
-    [Input("stop_lsl_stream", "n_clicks"), Input("start_lsl_stream", "value")]
+    [Input("stop_lsl_stream", "n_clicks"), Input("start_lsl_stream", "value")],
+    allow_duplicate=True
 )
 def stop_lsl_stream(n_clicks, pid):
     if n_clicks and pid:
@@ -273,6 +278,7 @@ def render_tab(tab_type):
             [
                 dash.html.H3(f"Live Visualization: {tab_type.capitalize()} points", className="mb-3"),
                 dbc.ButtonGroup([
+                    dash.dcc.Store(id="stream-store", data={"inlet": None}),
                     dbc.Button("Fetch tobii_gaze Stream", color="info", outline=True, id="fetch_stream"),
                     dbc.Button(f"Load ({tab_type.capitalize()} Visualization)", color="primary", outline=True, id=f"collect_{tab_type}_points"),
                     dbc.Button('Clear/Refresh', color="danger", outline=True, id="clear-button"),
@@ -297,7 +303,6 @@ def clear_data(n_clicks):
     return n_clicks
 
 def get_available_stream():
-    var.refresh()
     message = "No fetching performed"
     try:
         print("Fetching stream")
@@ -314,38 +319,40 @@ def get_available_stream():
     return None, message
 
 @app.callback(
-    Output("fetch_stream", "value"),
+    Output("stream-store", "data"),
     [Input("fetch_stream", "n_clicks")],
-    prevent_initial_call=True
+    prevent_initial_call=True,
 )
 def get_inlet(n_clicks):
     if n_clicks:
         inlet, message = get_available_stream()
         print(message)
-        return inlet
-    return None
+        if inlet is not None:
+            var.inlet = inlet
+            return {"inlet": var.inlet.info().name()}
+    return {"inlet": None}
 
 @app.callback(
     Output("stream-status", "children"),
-    [Input("fetch_stream", "value")]
+    [Input("stream-store", "data")]
 )
-def update_stream_status(inlet):
-    if inlet is not None:
-        name = inlet.info().name()
-        return dbc.Alert(f"Stream Connected to {name}", color="success", dismissable=True)
+def update_stream_status(data):
+    if data["inlet"] is not None:
+        inlet_name = data["inlet"]
+        return dbc.Alert(f"Stream Connected to {inlet_name}", color="success", dismissable=True)
     return dbc.Alert("No Stream Connected", color="danger", dismissable=True)
 
 
 @app.callback(
     Output('live-graph-gaze', 'children'),
     [Input("collect_gaze_points", "n_clicks"),
-     Input("fetch_stream", "value")],
+     Input("stream-store", "data")],
 )
-def update_graph_gaze(n_clicks, inlet):
+def update_graph_gaze(n_clicks, data):
     if n_clicks:
-        if inlet is not None:
+        if data["inlet"] is not None:
             while True:
-                sample, _ = inlet.pull_sample(timeout=0.0)
+                sample, _ = var.inlet.pull_sample(timeout=0.0)
                 if sample is None:
                     break
 
