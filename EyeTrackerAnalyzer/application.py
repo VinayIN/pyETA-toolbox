@@ -11,6 +11,7 @@ import pandas as pd
 from EyeTrackerAnalyzer import WARN, __version__
 from EyeTrackerAnalyzer.components.window import run_validation_window
 from EyeTrackerAnalyzer.components.track import Tracker
+import EyeTrackerAnalyzer.components.utils as eta_utils
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
 import plotly.express as px
@@ -19,16 +20,11 @@ from collections import deque
 import pylsl
 
 class Variable:
-    # Store gaze data using deques
-    max_data_points = 1000*60*2
+    max_data_points = 1000 * 60 * 2
     times = deque(maxlen=max_data_points)
     left_gaze_x = deque(maxlen=max_data_points)
     left_gaze_y = deque(maxlen=max_data_points)
-
-    # Buffer for collecting data between renders
-    buffer_times = []
-    buffer_x = []
-    buffer_y = []
+    buffer_times, buffer_x, buffer_y = [], [], []
 
     def refresh(self):
         self.times.clear()
@@ -44,95 +40,112 @@ def run_async_function(async_func):
     loop.run_until_complete(async_func())
     loop.close()
 
-
 app = dash.Dash(
     __package__,
     external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME],
-    suppress_callback_exceptions=True)
+    suppress_callback_exceptions=True
+)
 
 app.layout = dbc.Container([
-    dbc.Row(
-        [
-            dbc.Col(dash.html.H1("Eye Tracker Analyzer")),
-            dbc.Col(
-                dbc.ButtonGroup(
-                    [
-                        dbc.Button("Home", href="/", color="secondary", outline=True, class_name="my-2"),
-                        dbc.Button("Docs", href="/docs", color="secondary", outline=True),
-                    ],
-                    class_name="float-end",
-                    vertical=True)),
-        ],
-        align="center",
-        class_name="my-4"
-    ),
+    dbc.Row([
+        dbc.Col(dash.html.H1("Eye Tracker Analyzer", className="my-4")),
+        dbc.Col(
+            dbc.ButtonGroup([
+                dbc.Button("Home", href="/", color="secondary", outline=True),
+                dbc.Button("Docs", href="/docs", color="secondary", outline=True),
+            ], class_name="float-end"),
+            width="auto"
+        ),
+    ], class_name="mb-4"),
     dash.html.Hr(),
     dbc.Row([
-        dbc.Col(
-            dbc.Row([
-                dash.dcc.Markdown(
-                    f'''
-                    version: `{__version__}`
+        dbc.Col([
+            dash.dcc.Markdown(
+                f"""
+                Version: `{__version__}`
 
-                    This interface allows you to validate the eye tracker accuracy along with the following:
-                    - View gaze points
-                    - View fixation points
-                    - View eye tracker accuracy
-                        * Comparing the gaze data with validation grid locations.
-                    '''
-                ),
+                This interface allows you to validate the eye tracker accuracy along with the following:
+                - View gaze points
+                - View fixation points
+                - View eye tracker accuracy
+                    * Comparing the gaze data with validation grid locations.
+                """,
+                className="mb-4"
+            ),
+        ]),
+        dbc.Col([
+            dbc.Card(dbc.CardBody([
+                dbc.Row([
+                    dbc.Col([
+                        dash.html.Div(id='lsl-status'),
+                        dash.dcc.RadioItems(
+                            options=[
+                                {"label": " Mock", "value": "mock"},
+                                {"label": " Eye-Tracker", "value": "eye-tracker"}
+                            ],
+                            value='mock',
+                            id="tracker-type"
+                        ),
+                        dbc.Label("Data Rate (Hz)"),
+                        dash.dcc.Slider(
+                            min=0, step=100, max=800, value=600,
+                            id="tracker-data-rate",
+                        ),
+                        dash.dcc.Checklist(
+                            options=[
+                                {"label": " Push to stream (tobii_gaze)", "value": "push_stream"},
+                                {"label": " Add Fixation duration", "value": "fixation"},
+                                {"label": " Remove screen NaN (default: 0)", "value": "dont_screen_nans"},
+                                {"label": " Verbose", "value": "verbose"}
+                            ],
+                            value=["push_stream", "dont_screen_nans"],
+                            id="tracker-extra-options",
+                        )
+                    ]),
+                    dbc.Col([
+                        dbc.ButtonGroup([
+                            dbc.Button("Start - lsl Stream", color="primary", outline=True, id="start_lsl_stream"),
+                            dbc.Button("Stop - lsl Stream", color="danger", outline=True, id="stop_lsl_stream")
+                        ], vertical=True),
+                    ], class_name="align-self-center", width="auto"),
+                ])
             ])),
-        dbc.Col(
-                [
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    dbc.Row(dash.dcc.RadioItems(options=[{"label": " Mock", "value": "mock"}, {"label": " Eye-Tracker", "value": "eye-tracker"}], value='mock', id="tracker-type")),
-                                    dbc.Row(dbc.Label("Data Rate (Hz)", width="auto")),
-                                    dbc.Row(dash.dcc.Slider(min=0, step=100, max=800, value=600, id="tracker-data-rate")),
-                                    dbc.Row(dash.dcc.Checklist(
-                                        options=[
-                                            {"label": " Push to stream (tobii_gaze)", "value": "push_stream"},
-                                            {"label": " Add Fixation duration", "value": "fixation"},
-                                            {"label": " Remove screen NaN (default: 0)", "value": "dont_screen_nans"},
-                                            {"label": " Verbose", "value": "verbose"}
-                                        ],
-                                        value=["push_stream", "dont_screen_nans"], id="tracker-extra-options"))
-                                ]
-                            ),
-                            dbc.Col(
-                                dbc.ButtonGroup(
-                                    [
-                                        dbc.Button("Start - lsl Stream", color="primary", disabled=False, outline=True, id="start_lsl_stream"),
-                                        dbc.Button("Stop - lsl Stream", color="danger", disabled=False, outline=True, id="stop_lsl_stream")
-                                    ], vertical=True),
-                                class_name="align-self-center",
-                                width="auto"
-                                )
-                        ]
+            dbc.Row([
+                dbc.Col([
+                    dash.dcc.RadioItems(
+                        options=[
+                            {"label": " Mock", "value": "mock"},
+                            {"label": " Eye-Tracker", "value": "eye-tracker"}
+                        ],
+                        value='mock',
+                        id="validation-tracker-type",
                     ),
-                    dash.html.Hr(),
-                    dbc.Row(dash.dcc.RadioItems(options=[{"label": " Mock", "value": "mock"}, {"label": " Eye-Tracker", "value": "eye-tracker"}], value='mock', id="validation-tracker-type")),
-                    dbc.Row([dbc.Button("Validate Eye Tracker", color="secondary", disabled=False, outline=True, id="open-grid-window")], className='my-4')
+                    dbc.Button(
+                        "Validate Eye Tracker",
+                        color="secondary",
+                        outline=True,
+                        id="open-grid-window",
+                    )
                 ]),
-        ],),
+            ], class_name="mt-4")
+        ])
+    ]),
     dbc.Tabs([
         dbc.Tab(label="Gaze points", tab_id="eye-tracker-gaze"),
         dbc.Tab(label="Fixation", tab_id="eye-tracker-fixation"),
         dbc.Tab(label="Metrics", tab_id="eye-tracker-metrics")  
     ],
     id="tabs",
-    active_tab="eye-tracker-gaze"),
+    active_tab="eye-tracker-gaze",
+    class_name="mb-4"),
     dbc.Spinner(
-            [
-                dash.dcc.Store(id="store"),
-                dash.html.Div(id="tab-content", className="p-4"),
-            ],
-            delay_show=100,
-        ),
+        [
+            dash.dcc.Store(id="store"),
+            dash.html.Div(id="tab-content", className="p-4"),
+        ],
+        delay_show=100,
+    ),
 ], fluid=True, class_name="p-4")
-
 
 @app.callback(
     Output('open-grid-window', 'value'),
@@ -144,7 +157,7 @@ def update_window(n_clicks, value):
         print(f"executing: {run_validation_window.__name__}")
         tracker_params = {
             'data_rate': 600,
-            'use_mock': True if value == "mock" else False,
+            'use_mock': value == "mock",
             'fixation': False,
             'dont_screen_nans': True,
             'verbose': False,
@@ -162,7 +175,7 @@ def update_window(n_clicks, value):
     return 0
 
 def run_tracker(params):
-    duration = None
+    duration = params.get("duration")
     tracker = Tracker(
         data_rate=params['data_rate'],
         use_mock=params['use_mock'],
@@ -172,9 +185,8 @@ def run_tracker(params):
         push_stream=params['push_stream'],
         save_data=params['save_data']
     )
-    if params["duration"] is not None:
-        duration = params["duration"]
-        print(f"Totat Duration: {duration}")
+    if duration is not None:
+        print(f"Total Duration: {duration}")
     tracker.start_tracking(duration=duration)
 
 @app.callback(
@@ -188,20 +200,13 @@ def run_tracker(params):
 )
 def start_lsl_stream(n_clicks, tracker_type, data_rate, extra_options):
     if n_clicks:
-        use_mock = True if tracker_type == "mock" else False
-        fixation = True if "fixation" in extra_options else False
-        push_stream = True if "push_stream" in extra_options else False
-        dont_screen_nans = True if "dont_screen_nans" in extra_options else False
-        data_rate = data_rate if data_rate else 600
-        verbose = True if "verbose" in extra_options else False
-
         tracker_params = {
-            'data_rate': data_rate,
-            'use_mock': use_mock,
-            'fixation': fixation,
-            'dont_screen_nans': dont_screen_nans,
-            'verbose': verbose,
-            'push_stream': push_stream,
+            'data_rate': data_rate or 600,
+            'use_mock': tracker_type == "mock",
+            'fixation': "fixation" in extra_options,
+            'dont_screen_nans': "dont_screen_nans" in extra_options,
+            'verbose': "verbose" in extra_options,
+            'push_stream': "push_stream" in extra_options,
             'save_data': False
         }
 
@@ -211,26 +216,40 @@ def start_lsl_stream(n_clicks, tracker_type, data_rate, extra_options):
     return None
 
 @app.callback(
-    Output("stop_lsl_stream", "n_clicks"),
-    [Input("stop_lsl_stream", "n_clicks"), Input("start_lsl_stream", "value")])
+    Output("lsl-status", "children"),
+    [
+        Input("start_lsl_stream", "value"),
+        Input("stop_lsl_stream", "value"),
+    ]
+)
+def update_lsl_status(pid, stop_val):
+    if stop_val == 1:
+        return dbc.Alert("Stopped (Refresh the browser)", color="danger", dismissable=True)
+    if pid:
+        return dbc.Alert(f"Starting (PID: {pid})", color="success", dismissable=True)
+    return dbc.Alert("Not Running", color="warning", dismissable=True)
+
+@app.callback(
+    Output("stop_lsl_stream", "value"),
+    [Input("stop_lsl_stream", "n_clicks"), Input("start_lsl_stream", "value")]
+)
 def stop_lsl_stream(n_clicks, pid):
     if n_clicks and pid:
         try:
             os.kill(pid, signal.SIGINT)
             print(f"Process with PID {pid} stopped.")
-            return n_clicks
+            return 1
         except ProcessLookupError:
             print(f"Process with PID {pid} not found.")
     return 0
+
 
 @app.callback(
     [Output("start_lsl_stream", "disabled"), Output("stop_lsl_stream", "disabled")],
     [Input("start_lsl_stream", "value")]
 )
 def update_button_states(pid):
-    if pid:
-        return True, False
-    return False, True
+    return bool(pid), not bool(pid)
 
 @app.callback(
     Output("tab-content", "children"),
@@ -248,21 +267,23 @@ def render_tab_content(active_tab, data):
         return render_metrics_tab()
     return "No tab selected"
 
-
 def render_tab(tab_type):
-    return dbc.Container([
-        dbc.Row([
-            dash.html.H3(f"Live Visualization: {tab_type.capitalize()} points"),
-            dbc.ButtonGroup([
-                dbc.Button("Fetch tobii_gaze Stream", color="info", disabled=False, outline=True, id="fetch_stream"),
-                dbc.Button(f"Load ({tab_type.capitalize()} Visualization)", color="primary", outline=True, id=f"collect_{tab_type}_points"),
-                dbc.Button('Clear/Refresh', color="danger", outline=True, id="clear-button"),
-            ], class_name="my-2"),
-            dash.html.Hr(),
-            dash.html.Div(id=f'live-graph-{tab_type}'),
-            dash.dcc.Interval(id=f'graph_update_{tab_type}', interval=300, n_intervals=0),
-        ])
-    ])
+    return dbc.Card(dbc.CardBody(
+        dbc.Row(
+            [
+                dash.html.H3(f"Live Visualization: {tab_type.capitalize()} points", className="mb-3"),
+                dbc.ButtonGroup([
+                    dbc.Button("Fetch tobii_gaze Stream", color="info", outline=True, id="fetch_stream"),
+                    dbc.Button(f"Load ({tab_type.capitalize()} Visualization)", color="primary", outline=True, id=f"collect_{tab_type}_points"),
+                    dbc.Button('Clear/Refresh', color="danger", outline=True, id="clear-button"),
+                ], class_name="mb-4"),
+                dash.html.Div(id="stream-status"),
+                dash.html.Hr(),
+                dash.html.Div(id=f'live-graph-{tab_type}'),
+                dash.dcc.Interval(id=f'graph_update_{tab_type}', interval=300, n_intervals=0),
+            ]
+        )
+    ))
 
 @app.callback(
     Output('clear-button', 'n_clicks'),
@@ -274,7 +295,6 @@ def clear_data(n_clicks):
         print("clear button clicked")
         var.refresh()
     return n_clicks
-
 
 def get_available_stream():
     var.refresh()
@@ -305,6 +325,16 @@ def get_inlet(n_clicks):
         return inlet
     return None
 
+@app.callback(
+    Output("stream-status", "children"),
+    [Input("fetch_stream", "value")]
+)
+def update_stream_status(inlet):
+    if inlet is not None:
+        name = inlet.info().name()
+        return dbc.Alert(f"Stream Connected to {name}", color="success", dismissable=True)
+    return dbc.Alert("No Stream Connected", color="danger", dismissable=True)
+
 
 @app.callback(
     Output('live-graph-gaze', 'children'),
@@ -320,8 +350,7 @@ def update_graph_gaze(n_clicks, inlet):
                     break
 
                 current_time = datetime.datetime.fromtimestamp(sample[8])
-                screen_width = sample[6]
-                screen_height = sample[7]
+                screen_width, screen_height = sample[6], sample[7]
                 gaze_x = int(sample[0] * screen_width)
                 gaze_y = int(sample[1] * screen_height)
 
@@ -333,72 +362,55 @@ def update_graph_gaze(n_clicks, inlet):
             var.left_gaze_x.extend(var.buffer_x)
             var.left_gaze_y.extend(var.buffer_y)
             var.buffer_times, var.buffer_x, var.buffer_y = [], [], []
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=list(var.times),
-                y=list(var.left_gaze_x),
-                mode='lines',
-                name='Gaze X'
-            ))
 
-            fig.add_trace(go.Scatter(
-                x=list(var.times),
-                y=list(var.left_gaze_y),
-                mode='lines',
-                name='Gaze Y'
-            ))
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=list(var.times), y=list(var.left_gaze_x), mode='lines', name='Gaze X'))
+            fig.add_trace(go.Scatter(x=list(var.times), y=list(var.left_gaze_y), mode='lines', name='Gaze Y'))
 
             fig.update_layout(
                 title='Eye Gaze Data Over Time',
-                xaxis=dict(
-                    title='Timestamp',
-                    range=[min(var.times), max(var.times)],
-                    type='date'
-                ),
-                yaxis=dict(
-                    title='Gaze Position',
-                    range=[0, max(screen_height, screen_width)]
-                ),
+                xaxis=dict(title='Timestamp', range=[min(var.times), max(var.times)], type='date'),
+                yaxis=dict(title='Gaze Position', range=[0, max(screen_height, screen_width)]),
                 showlegend=True
             )
-            return fig
-        print("update_graph_gaze")
-        return dbc.Alert(
-            "Did you start `lsl stream`?/ clicked the button `Fetch tobii_gaze stream`?",
-            color="danger", dismissable=True)
-    return dbc.Alert(
-            "Click the Load (Gaze Visualization) button to load the graph",
-            color="info", dismissable=True)
+            return dbc.Card(dbc.CardBody([dash.dcc.Graph(figure=fig)]), class_name="mt-3")
+        return dbc.Alert("Did you start `lsl stream`?/ clicked the button `Fetch tobii_gaze stream`?",
+                         color="danger", dismissable=True)
+    return dbc.Alert("Click the Load (Gaze Visualization) button to load the graph",
+                     color="info", dismissable=True)
 
 def get_file_names(prefix):
-    return [f for f in os.listdir('data/') if f.startswith(prefix)]
+    if os.path.exists('data/'):
+        return [f for f in os.listdir('data/') if f.startswith(prefix)]
+    return []
 
 def render_metrics_tab():
     gaze_files = get_file_names("gaze_data_")
     validation_files = get_file_names("system_")
 
-    return dbc.Container([
-        dbc.Row([
-            dash.html.H3("Statistics: Eye Tracker Validation"),
-            dash.html.Hr(),
-            dbc.Col(dash.dcc.Dropdown(
-                id='gaze-data-dropdown',
-                options=[{'label': f, 'value': f} for f in gaze_files],
-                placeholder="Select Gaze Data File"
-            )),
-            dbc.Col(dash.dcc.Dropdown(
-                id='validation-data-dropdown',
-                options=[{'label': f, 'value': f} for f in validation_files],
-                placeholder="Select Validation File"
-            )),
-        ]),
-        dbc.Row([
-            dash.html.Div(id='dropdown-output'),
-            dbc.Button("Analyze", color="success", disabled=False, outline=True, id="analyze-button", class_name="my-4"),
-            dash.html.Hr(),
-            dash.html.Div(id='graph-output')
-        ])
-    ])
+    return dbc.Card(
+        dbc.CardBody(
+            dbc.Row([
+                dash.html.H3("Statistics: Eye Tracker Validation", className="mb-3"),
+                dbc.Row([
+                    dbc.Col(dash.dcc.Dropdown(
+                        id='gaze-data-dropdown',
+                        options=[{'label': f, 'value': f} for f in gaze_files],
+                        placeholder="Select Gaze Data File"
+                    )),
+                    dbc.Col(dash.dcc.Dropdown(
+                        id='validation-data-dropdown',
+                        options=[{'label': f, 'value': f} for f in validation_files],
+                        placeholder="Select Validation File"
+                    )),
+                ]),
+                dash.html.Div(id='dropdown-output', className="my-2"),
+                dbc.Button("Analyze", color="success", outline=True, id="analyze-button", class_name="mb-2"),
+                dash.html.Hr(),
+                dash.html.Div(id='graph-output')
+            ])
+        )
+    )
 
 @app.callback(
     Output('live-graph-fixation', 'children'),
@@ -409,7 +421,6 @@ def update_graph_fixation(n_clicks, inlet):
     if n_clicks:
         if inlet is not None:
             pass
-        print("update_graph_fixation")
         return dbc.Alert(
             "Did you start `lsl stream`?/ clicked the button `Fetch tobii_gaze stream`?",
             color="danger", dismissable=True)
@@ -426,9 +437,7 @@ def update_dropdown(gaze_data):
     if gaze_data:
         ts_gaze_data = re.search(r"gaze_data_(.*).json", gaze_data).group(1)
         ts_gaze_data = datetime.datetime.strptime(ts_gaze_data, "%Y%m%d_%H%M%S")
-    return dbc.Row([
-        dbc.Col(f"Timestamp: {ts_gaze_data}")
-    ])
+    return f"Selected Gaze Data Timestamp: {ts_gaze_data}"
 
 @app.callback(
     Output('graph-output', 'children'),
@@ -437,12 +446,17 @@ def update_dropdown(gaze_data):
      Input('validation-data-dropdown', 'value')]
 )
 def update_graph_metrics(n_clicks, gaze_data, validation_data):
-    if n_clicks:
-        pass
+    if n_clicks and gaze_data and validation_data:
+        return dbc.Card(
+            dbc.CardBody([
+                dash.html.H4("Eye Tracker Metrics Analysis"),
+                dash.html.P(f"Analysis based on: {gaze_data} and {validation_data}")
+            ]),
+            class_name="mt-3"
+        )
     return dbc.Alert(
-                "Choose appropriate files combination to analyze the eyetracker data",
+                "Choose appropriate files combination to analyze the eye tracker data",
                 color="info", dismissable=True)
-
 
 if __name__ == '__main__':
     app.run(debug=True)
