@@ -64,7 +64,21 @@ class Tracker:
 
         if self.push_stream:
             n_channels = 10
-            n_channels += 1 if self.fixation else 0
+            min_cutoff = 0.004
+            beta = 0.7
+            if self.fixation:
+                self.__fixation_elapsed = 0.0
+                self.__one_euro_filter_x = eta_utils.OneEuroFilter(
+                    initial_time=eta_utils.get_timestamp(),
+                    initial_value=0.0,
+                    min_cutoff = min_cutoff,
+                    beta = beta)
+                self.__one_euro_filter_y = eta_utils.OneEuroFilter(
+                    initial_time=eta_utils.get_timestamp(),
+                    initial_value=0.0,
+                    min_cutoff = min_cutoff,
+                    beta = beta)
+
             info = lsl.StreamInfo(
                 name='tobii_gaze',
                 stype='Gaze',
@@ -76,7 +90,18 @@ class Tracker:
             print(f"LSL Stream Info: {self.lsl_gaze_outlet.get_sinfo()}")
         print(f"Member Variables: {vars(self)}")
         print("\n\nPress Ctrl+C to stop tracking...")
-    
+
+    def _check_fixation(self, t, x, y, velocity_threshold=0.5):
+        previous_t = self.__one_euro_filter_x.previous_time
+        filtered_x = self.__one_euro_filter_x(t, x)
+        filtered_y = self.__one_euro_filter_y(t, y)
+        velocity = np.sqrt((filtered_x - x)**2 + (filtered_y - y)**2)
+        elapsed_time = t - previous_t
+        is_fixated = False
+        if velocity <= velocity_threshold:
+            is_fixated = True
+        return is_fixated, velocity, elapsed_time
+
     def _collect_gaze_data(self, gaze_data):
         data = {
             "timestamp": eta_utils.get_timestamp(),
@@ -103,8 +128,15 @@ class Tracker:
                     lsl.local_clock()
                 ], dtype=np.float64)
         if self.fixation:
+            is_fixated, velocity, elapsed_time = self._check_fixation(
+                t=data["timestamp"],
+                x=data["left_eye"]["gaze_point"][0],
+                y=data["left_eye"]["gaze_point"][1])
+            self.__fixation_elapsed = (self.__fixation_elapsed + elapsed_time) if is_fixated else 0.0
             fixation_data = {
-                "fixation_elapsed": 0.0
+                "fixated": is_fixated,
+                "velocity": velocity,
+                "fixation_elapsed": self.__fixation_elapsed
             }
             data.update(fixation_data)
             stream_data = np.append(stream_data, data["fixation_elapsed"])
@@ -113,7 +145,7 @@ class Tracker:
         if self.save_data: self.gaze_data.append(data)
         def multiply_tuples(t1, t2=(self.screen_width, self.screen_height)):
             return tuple(x*y for x,y in zip(t1, t2))
-        if self.verbose: print(f'L: {multiply_tuples(data["left_eye"]["gaze_point"])}, R: {multiply_tuples(data["right_eye"]["gaze_point"])}')
+        if self.verbose: print(f'L: {multiply_tuples(data["left_eye"]["gaze_point"])}, R: {multiply_tuples(data["right_eye"]["gaze_point"])}, ({data.get("fixated")}, {data.get("velocity")}, {data.get("fixation_elapsed")})')
 
     def start_tracking(self, duration: Optional[float]=None):
         """Starts tracking continuously and saves the data to a file, if save_data flag is set to True during initialization."""
