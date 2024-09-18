@@ -95,8 +95,9 @@ class Tracker:
         previous_t = self.__one_euro_filter_x.previous_time
         filtered_x = self.__one_euro_filter_x(t, x)
         filtered_y = self.__one_euro_filter_y(t, y)
-        velocity = np.sqrt((filtered_x - x)**2 + (filtered_y - y)**2)
+        distance = np.sqrt((filtered_x - x)**2 + (filtered_y - y)**2)
         elapsed_time = t - previous_t
+        velocity = distance / elapsed_time
         is_fixated = False
         if velocity <= velocity_threshold:
             is_fixated = True
