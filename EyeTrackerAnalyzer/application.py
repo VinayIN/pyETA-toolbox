@@ -119,7 +119,7 @@ app.layout = dbc.Container([
                     ]),
                     dbc.Col([
                         dbc.ButtonGroup([
-                            dbc.Button("Start - lsl Stream", color="primary", outline=True, id="start_lsl_stream"),
+                            dbc.Button("Start - lsl Stream", color="success", outline=True, id="start_lsl_stream"),
                             dbc.Button("Stop - lsl Stream", color="danger", outline=True, id="stop_lsl_stream")
                         ], vertical=True),
                     ], class_name="align-self-center", width="auto"),
@@ -453,14 +453,23 @@ def update_graph_fixation(data):
 
 @app.callback(
     Output('dropdown-output', 'children'),
-    [Input('gaze-data-dropdown', 'value')]
+    [Input('gaze-data-dropdown', 'value'), Input('validation-data-dropdown', 'value')]
 )
-def update_dropdown(gaze_data):
+def update_dropdown(gaze_data, validation_data):
     ts_gaze_data = "-"
+    info_validation_data = "-"
     if gaze_data:
         ts_gaze_data = re.search(r"gaze_data_(.*).json", gaze_data).group(1)
         ts_gaze_data = datetime.datetime.strptime(ts_gaze_data, "%Y%m%d_%H%M%S")
-    return f"Selected Gaze Data Timestamp: {ts_gaze_data}"
+    if validation_data:
+        info_validation_data = re.search(r"system_(.*).json", validation_data).group(1)
+        info_validation_data = re.sub(r'_', " | ", info_validation_data)
+    return dbc.Row(
+        [
+        dbc.Col(dash.html.I(f"Selected Gaze Data Timestamp: {ts_gaze_data}")),
+        dbc.Col(dash.html.I(f"Selected System Information: {info_validation_data}"))
+        ]
+    )
 
 @app.callback(
     Output('graph-output', 'children'),
