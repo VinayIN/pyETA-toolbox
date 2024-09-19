@@ -14,6 +14,7 @@ def get_current_screen_size():
     screen = app.primaryScreen()
     size = screen.size()
     width, height = size.width(), size.height()
+    app.quit()
     return width, height
 
 def get_system_info():

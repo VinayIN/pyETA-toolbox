@@ -27,16 +27,12 @@ class Variable:
     left_gaze_y = deque(maxlen=max_data_points)
     buffer_times, buffer_x, buffer_y = [], [], []
 
-    def refresh(self):
-        if self.inlet:
-            print(f"Closing the stream: {self.inlet.info().name()}")
-            self.inlet.close_stream()
-        self.inlet, message = get_available_stream()
-        print(message)
+    def refresh_gaze(self):
         self.times.clear()
         self.left_gaze_x.clear()
         self.left_gaze_y.clear()
         self.buffer_times, self.buffer_x, self.buffer_y = [], [], []
+
 
 var = Variable()
 
@@ -149,6 +145,12 @@ app.layout = dbc.Container([
             ], class_name="mt-4")
         ])
     ]),
+    dbc.Spinner([
+        dash.dcc.Store(id="stream-store", data={"inlet": None, "message": "Not connected to stream"}),
+        dbc.Button("Fetch tobii_gaze Stream", color="secondary", outline=True, id="fetch_stream", class_name="my-2"),
+        dash.html.Div(id="stream-status")],
+        delay_show=100
+    ),
     dbc.Tabs([
         dbc.Tab(label="Gaze points", tab_id="eye-tracker-gaze"),
         dbc.Tab(label="Fixation", tab_id="eye-tracker-fixation"),
@@ -157,13 +159,7 @@ app.layout = dbc.Container([
     id="tabs",
     active_tab="eye-tracker-gaze",
     class_name="mb-4"),
-    dbc.Spinner(
-        [
-            dash.dcc.Store(id="store"),
-            dash.html.Div(id="tab-content", className="p-4"),
-        ],
-        delay_show=100,
-    ),
+    dash.html.Div(id="tab-content", className="p-4"),
     dash.html.Footer([
         dbc.Col([
             dash.html.A(
@@ -282,9 +278,9 @@ def update_button_states(pid):
 
 @app.callback(
     Output("tab-content", "children"),
-    [Input("tabs", "active_tab"), Input("store", "data")],
+    [Input("tabs", "active_tab")],
 )
-def render_tab_content(active_tab, data):
+def render_tab_content(active_tab):
     if active_tab == "eye-tracker-gaze":
         print("plotting gaze points")
         return render_tab(tab_type="gaze")
@@ -301,29 +297,27 @@ def render_tab(tab_type):
         dbc.Row(
             [
                 dash.html.H3(f"Live Visualization: {tab_type.capitalize()} points", className="mb-3"),
-                dbc.ButtonGroup([
-                    dash.dcc.Store(id="stream-store", data={"inlet": None}),
-                    dbc.Button("Fetch tobii_gaze Stream", color="info", outline=True, id="fetch_stream"),
-                    dbc.Button(f"Load ({tab_type.capitalize()} Visualization)", color="primary", outline=True, id=f"collect_{tab_type}_points"),
-                    dbc.Button('Clear/Refresh', color="danger", outline=True, id="clear-button", class_name="bi bi-arrow-clockwise"),
-                ], class_name="mb-4"),
-                dash.html.Div(id="stream-status"),
                 dash.html.Hr(),
+                dbc.Col(
+                    dbc.Button("Refresh", color="warning", outline=True, id=f"refresh-{tab_type}", class_name="bi bi-arrow-clockwise"),
+                    width="auto",
+                    class_name="mb-3"
+                ),
                 dash.html.Div(id=f'live-graph-{tab_type}'),
-                dash.dcc.Interval(id=f'graph_update_{tab_type}', interval=300, n_intervals=0),
+                dash.dcc.Interval(id=f'graph-update-{tab_type}', interval=300, n_intervals=0),
             ]
         )
     ))
 
 @app.callback(
-    Output('clear-button', 'n_clicks'),
-    [Input('clear-button', 'n_clicks')],
+    Output('refresh-gaze', 'n_clicks'),
+    [Input('refresh-gaze', 'n_clicks')],
     prevent_initial_call=True
 )
 def clear_data(n_clicks):
     if n_clicks:
-        print("clear button clicked")
-        var.refresh()
+        print("Refresh button clicked gaze")
+        var.refresh_gaze()
     return n_clicks
 
 def get_available_stream():
@@ -355,62 +349,63 @@ def get_inlet(n_clicks):
             print(message)
         else:
             name = var.inlet.info().name()
-        return {"inlet": name}
-    return {"inlet": None}
+        return {"inlet": name, "message": message}
+    return {"inlet": None, "message": "Not connected to stream"}
 
 @app.callback(
     Output("stream-status", "children"),
     [Input("stream-store", "data")]
 )
 def update_stream_status(data):
-    if data["inlet"] is not None:
-        inlet_name = data["inlet"]
-        return dbc.Alert(f"Stream Connected to {inlet_name}", color="success", dismissable=True)
-    return dbc.Alert("No Stream Connected", color="danger", dismissable=True)
+    inlet_name = data["inlet"]
+    message = data["message"]
+    if inlet_name is not None:
+        return dbc.Alert(f"Success ({message})", color="success", dismissable=True)
+    return dbc.Alert(f"Failed ({message})", color="danger", dismissable=True)
 
 
 @app.callback(
     Output('live-graph-gaze', 'children'),
-    [Input("collect_gaze_points", "n_clicks"),
-     Input("stream-store", "data")],
+    [   
+        Input('graph-update-gaze', 'n_intervals'),
+        Input("stream-store", "data")
+    ],
 )
-def update_graph_gaze(n_clicks, data):
-    if n_clicks:
-        if data["inlet"] is not None:
-            while True:
-                sample, _ = var.inlet.pull_sample(timeout=0.0)
-                if sample is None:
-                    break
+def update_graph_gaze(n_intervals, data):
+    if data["inlet"] is not None:
+        while True:
+            sample, _ = var.inlet.pull_sample(timeout=0.0)
+            if sample is None:
+                break
 
-                current_time = datetime.datetime.fromtimestamp(sample[8])
-                screen_width, screen_height = sample[6], sample[7]
-                gaze_x = int(sample[0] * screen_width)
-                gaze_y = int(sample[1] * screen_height)
+            current_time = datetime.datetime.fromtimestamp(sample[8])
+            screen_width, screen_height = sample[6], sample[7]
+            gaze_x = int(sample[0] * screen_width)
+            gaze_y = int(sample[1] * screen_height)
 
-                var.buffer_times.append(current_time)
-                var.buffer_x.append(gaze_x)
-                var.buffer_y.append(gaze_y)
+            var.buffer_times.append(current_time)
+            var.buffer_x.append(gaze_x)
+            var.buffer_y.append(gaze_y)
+        
+        var.times.extend(var.buffer_times)
+        var.left_gaze_x.extend(var.buffer_x)
+        var.left_gaze_y.extend(var.buffer_y)
+        var.buffer_times, var.buffer_x, var.buffer_y = [], [], []
 
-            var.times.extend(var.buffer_times)
-            var.left_gaze_x.extend(var.buffer_x)
-            var.left_gaze_y.extend(var.buffer_y)
-            var.buffer_times, var.buffer_x, var.buffer_y = [], [], []
+        fig = go.Figure(skip_invalid=True)
+        fig.add_trace(go.Scatter(x=list(var.times), y=list(var.left_gaze_x), mode='lines', name='Gaze X'))
+        fig.add_trace(go.Scatter(x=list(var.times), y=list(var.left_gaze_y), mode='lines', name='Gaze Y'))
 
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=list(var.times), y=list(var.left_gaze_x), mode='lines', name='Gaze X'))
-            fig.add_trace(go.Scatter(x=list(var.times), y=list(var.left_gaze_y), mode='lines', name='Gaze Y'))
-
+        if len(var.times) > 0:
             fig.update_layout(
                 title='Eye Gaze Data Over Time',
                 xaxis=dict(title='Timestamp', range=[min(var.times), max(var.times)], type='date'),
                 yaxis=dict(title='Gaze Position', range=[0, max(screen_height, screen_width)]),
                 showlegend=True
             )
-            return dbc.Card(dbc.CardBody([dash.dcc.Graph(figure=fig)]), class_name="mt-3")
-        return dbc.Alert("Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze stream`?",
-                         color="danger", dismissable=True)
-    return dbc.Alert("Click the Load (Gaze Visualization) button to load the graph",
-                     color="info", dismissable=True)
+        return dbc.Card(dbc.CardBody(dash.dcc.Graph(figure=fig)))
+    return dbc.Alert("Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze stream`?",
+                     color="danger", dismissable=True)
 
 def get_file_names(prefix):
     if os.path.exists('data/'):
@@ -447,19 +442,14 @@ def render_metrics_tab():
 
 @app.callback(
     Output('live-graph-fixation', 'children'),
-    [Input("collect_fixation_points", "n_clicks"),
-     Input("fetch_stream", "value")],
+    [Input("stream-store", "data")],
 )
-def update_graph_fixation(n_clicks, inlet):
-    if n_clicks:
-        if inlet is not None:
-            pass
-        return dbc.Alert(
-            "Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze stream`?",
-            color="danger", dismissable=True)
+def update_graph_fixation(data):
+    if data["inlet"] is not None:
+        pass
     return dbc.Alert(
-            "Click the Load (Fixation Visualization) button to load the graph",
-            color="info", dismissable=True)
+        "Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze stream`?",
+        color="danger", dismissable=True)
 
 @app.callback(
     Output('dropdown-output', 'children'),
