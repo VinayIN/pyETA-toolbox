@@ -61,23 +61,25 @@ class Tracker:
                     raise ValueError("No eye tracker device found.")
         except Exception as e:
             raise ValueError(f"Error initializing the eye tracker: {e}")
+        if self.fixation:
+            min_cutoff = 0.004
+            beta = 0.7
+            self.__fixation_elapsed = 0.0
+            self.__velocity_threshold = VELOCITY_THRESHOLD
+            self.__one_euro_filter_x = eta_utils.OneEuroFilter(
+                initial_time=eta_utils.get_timestamp(),
+                initial_value=0.0,
+                min_cutoff = min_cutoff,
+                beta = beta)
+            self.__one_euro_filter_y = eta_utils.OneEuroFilter(
+                initial_time=eta_utils.get_timestamp(),
+                initial_value=0.0,
+                min_cutoff = min_cutoff,
+                beta = beta)
 
         if self.push_stream:
             n_channels = 10
-            min_cutoff = 0.004
-            beta = 0.7
-            if self.fixation:
-                self.__fixation_elapsed = 0.0
-                self.__one_euro_filter_x = eta_utils.OneEuroFilter(
-                    initial_time=eta_utils.get_timestamp(),
-                    initial_value=0.0,
-                    min_cutoff = min_cutoff,
-                    beta = beta)
-                self.__one_euro_filter_y = eta_utils.OneEuroFilter(
-                    initial_time=eta_utils.get_timestamp(),
-                    initial_value=0.0,
-                    min_cutoff = min_cutoff,
-                    beta = beta)
+            n_channels += 1 if self.fixation else 0
 
             info = lsl.StreamInfo(
                 name='tobii_gaze',
@@ -91,7 +93,7 @@ class Tracker:
         print(f"Member Variables: {vars(self)}")
         print("\n\nPress Ctrl+C to stop tracking...")
 
-    def _check_fixation(self, t, x, y, velocity_threshold=0.5):
+    def _check_fixation(self, t, x, y):
         previous_t = self.__one_euro_filter_x.previous_time
         filtered_x = self.__one_euro_filter_x(t, x)
         filtered_y = self.__one_euro_filter_y(t, y)
@@ -99,7 +101,7 @@ class Tracker:
         elapsed_time = t - previous_t
         velocity = distance / elapsed_time
         is_fixated = False
-        if velocity <= velocity_threshold:
+        if velocity <= self.__velocity_threshold:
             is_fixated = True
         return is_fixated, velocity, elapsed_time
 
@@ -209,6 +211,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     print("Arguments: ", args)
+
+    VELOCITY_THRESHOLD = 0.5
 
     tracker = Tracker(
         data_rate=args.data_rate,

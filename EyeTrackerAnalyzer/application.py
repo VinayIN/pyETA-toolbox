@@ -12,6 +12,7 @@ from EyeTrackerAnalyzer import WARN, __version__
 from EyeTrackerAnalyzer.components.window import run_validation_window
 from EyeTrackerAnalyzer.components.track import Tracker
 import EyeTrackerAnalyzer.components.utils as eta_utils
+import EyeTrackerAnalyzer.components.validate as eta_validate
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
 import plotly.express as px
@@ -479,11 +480,21 @@ def update_dropdown(gaze_data, validation_data):
 )
 def update_graph_metrics(n_clicks, gaze_data, validation_data):
     if n_clicks and gaze_data and validation_data:
+        gaze_data = os.path.abspath(f"data/{gaze_data}")
+        validation_data = os.path.abspath(f"data/{validation_data}")
+        df_statistics = eta_validate.get_statistics(gaze_data, validation_data)
+        content = dbc.Alert(
+            "No data available for the selected files",
+            color="danger", dismissable=True)
+        if not df_statistics.empty:
+            content = [
+                    dash.dash_table.DataTable(
+                        data = df_statistics.to_dict('records'),
+                        id='metrics-table'
+                    ),
+                ]
         return dbc.Card(
-            dbc.CardBody([
-                dash.html.H4("Eye Tracker Metrics Analysis"),
-                dash.html.P(f"Analysis based on: {gaze_data} and {validation_data}")
-            ]),
+            dbc.CardBody(content),
             class_name="mt-3"
         )
     return dbc.Alert(

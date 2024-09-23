@@ -83,6 +83,44 @@ class OneEuroFilter:
         self.previous_time = current_time
 
         return filtered_value
+    
+def get_euler_form(point, reference=None):
+    "If reference provided, point of origin changes to reference. Provide the parameters in cartesian form"
+    point = complex(point[0], point[1])
+    if reference is not None:
+        point = point - complex(reference[0] - reference[1])
+    p = math.atan2(point.imag, point.real)
+    m = math.sqrt(point.real**2 + point.imag**2)
+    return m,p
+
+def get_cartesian(euler, reference=None):
+    x = euler[0] * math.cos(euler[1])
+    y = euler[0] * math.sin(euler[1])
+    if reference is not None:
+        ref_x, ref_y = get_cartesian(reference)
+        x = x + ref_x
+        y = y + ref_y
+    return x, y
+
+def phase_to_degree(phase):
+    if phase < 0:
+        phase += 2 * math.pi
+    return phase * 180 / math.pi
+
+def degree_to_phase(degree):
+    if degree < 0:
+        degree += 360
+    return degree * math.pi / 180
+
+def get_actual_from_relative(relative, screen_width, screen_height):
+    pixel_x = relative[0]*screen_width
+    pixel_y = relative[1]*screen_height
+    return int(pixel_x), int(pixel_y)
+
+def get_relative_from_actual(actual, screen_width, screen_height):
+    pixel_x = actual[0]/screen_width
+    pixel_y = actual[1]/screen_height
+    return pixel_x, pixel_y
 
 class WarningGenerator:
     def __init__(self, filter_categories: Optional[List]=None):
