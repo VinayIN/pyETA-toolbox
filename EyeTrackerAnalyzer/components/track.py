@@ -15,6 +15,7 @@ except ModuleNotFoundError:
     print("Without tobii_research library, Tobii eye-tracker won't work.")
 import numpy as np
 
+VELOCITY_THRESHOLD = 0.5
 
 class Tracker:
     def __init__(
@@ -211,8 +212,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     print("Arguments: ", args)
-
-    VELOCITY_THRESHOLD = 0.5
 
     tracker = Tracker(
         data_rate=args.data_rate,

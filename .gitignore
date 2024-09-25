@@ -1,3 +1,10 @@
 **Pipfile.lock
+**poetry.lock
+**/dist
+**/build
+**.pytest_cache
 **/__pycache__
+**.vscode
 **/data
+**/docs
+**/log

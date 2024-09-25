@@ -3,6 +3,7 @@ import pytest
 import math
 import random
 from EyeTrackerAnalyzer.components.utils import OneEuroFilter
+from EyeTrackerAnalyzer import LOGGER
 
 def generate_synthetic_data(num_points, noise_amplitude=0.1, frequency=1):
     data = []
@@ -27,5 +28,5 @@ def test_one_euro_filter():
     # Check that the filtered values are smoother than the original data
     original_diff = [abs(synthetic_data[i+1][1] - synthetic_data[i][1]) for i in range(len(synthetic_data)-1)]
     filtered_diff = [abs(filtered_values[i+1] - filtered_values[i]) for i in range(len(filtered_values)-1)]
-    
+    LOGGER.info(f"Original diff: {sum(original_diff)}, Filtered diff: {sum(filtered_diff)}")
     assert sum(filtered_diff) < sum(original_diff), "Filtered data should be smoother than original data"

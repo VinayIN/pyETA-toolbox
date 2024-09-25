@@ -1,5 +1,39 @@
+[tool.poetry]
+name = "EyeTrackerAnalyzer"
+version = "0.0.1"
+description = "This toolbox provides a realtime visualization of eye tracking data to be used for designing passive BCI system."
+authors = ["Binay Kumar Pradhan <pradhan.binay@b-tu.de>"]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/VinayIN/EyeTrackerAnalyzer"
+keywords = ["eyetracker", "tobii", "mock tobii", "passiveBCI"]
+packages = [
+    { include = "EyeTrackerAnalyzer" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10, <3.11"
+dash = "^2.18.1"
+numpy = "^2.1.1"
+pandas = "^2.2.3"
+pylsl = "^1.16.2"
+mne-lsl = "^1.6.0"
+pyqt6 = "^6.7.1"
+pynput = "^1.7.7"
+dash-bootstrap-components = "^1.6.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.3"
+ipython = "^8.27.0"
+pytest-asyncio = "^0.24.0"
+
 [tool.pytest.ini_options]
 testpaths = ["EyeTrackerAnalyzer/tests"]
 log_cli = true
 log_cli_level = "INFO"
+log_file_format = "%(asctime)s :: %(name)s:%(filename)s:%(lineno)d :: %(levelname)s :: %(message)s"
 log_file = "log/test.log"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
