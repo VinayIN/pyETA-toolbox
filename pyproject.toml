@@ -32,7 +32,7 @@ testpaths = ["EyeTrackerAnalyzer/tests"]
 log_cli = true
 log_cli_level = "INFO"
 log_file_format = "%(asctime)s :: %(name)s:%(filename)s:%(lineno)d :: %(levelname)s :: %(message)s"
-log_file = "log/test.log"
+log_file = "eta_data/test.log"
 
 [build-system]
 requires = ["poetry-core"]

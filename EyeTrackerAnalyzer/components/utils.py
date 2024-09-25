@@ -5,6 +5,9 @@ import platform
 import datetime
 from typing import List, Optional
 import PyQt6.QtWidgets as qtw
+import os
+import glob
+from EyeTrackerAnalyzer import __datapath__
 
 def get_current_screen_size():
     app = qtw.QApplication.instance()
@@ -22,7 +25,8 @@ def get_system_info():
     system = platform.system()
     machine = platform.machine()
     width, height = get_current_screen_size()
-    return f"{node}_{system}_{machine}_{width}x{height}"
+    time_now = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    return f"{node}_{system}_{machine}_{width}x{height}_{time_now}"
 
 def get_timestamp():
     return datetime.datetime.now().timestamp()
@@ -122,13 +126,13 @@ def get_relative_from_actual(actual, screen_width, screen_height):
     pixel_y = actual[1]/screen_height
     return pixel_x, pixel_y
 
-class WarningGenerator:
-    def __init__(self, filter_categories: Optional[List]=None):
-        self.filter_categories = filter_categories
-
-    def generate_warning(self, message: str, category: Optional[Warning]=None):
-        if category and self.filter_categories:
-            if category in self.filter_categories:
-                warnings.filterwarnings('ignore', message, category)
-        else:
-            warnings.warn(message, category=category, stacklevel=3)
+def get_file_names(prefix, directory=None):
+    '''
+    if directory is None, check from the default path specified in EyeTrackerAnalyzer.__dirpath__
+    '''
+    if directory is None:
+        directory = __datapath__
+    directory = os.path.abspath(directory)
+    if os.path.exists(directory):
+        return glob.glob(os.path.join(directory, f'{prefix}*'))
+    return []

@@ -5,6 +5,6 @@
 **.pytest_cache
 **/__pycache__
 **.vscode
-**/data
+**/eta_data
 **/docs
-**/log
+**/*.log

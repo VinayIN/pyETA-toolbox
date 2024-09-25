@@ -6,6 +6,7 @@ import random
 import datetime
 import json
 import os
+from EyeTrackerAnalyzer import __datapath__
 import EyeTrackerAnalyzer.components.utils as eta_utils
 
 class ValidationWindow(qtw.QMainWindow):
@@ -96,17 +97,17 @@ class ValidationWindow(qtw.QMainWindow):
         self.collected_data.append(data_point)
 
     def process_data(self):
-        data_path = os.path.join(os.path.dirname(__package__), "data")
-        if not os.path.exists(data_path):
-            os.makedirs(data_path)
-        with open(os.path.join(data_path, f"system_{eta_utils.get_system_info()}.json"), "w") as f:
+        if not os.path.exists(__datapath__):
+            os.makedirs(__datapath__)
+        file = os.path.join(__datapath__, f"system_{eta_utils.get_system_info()}.json")
+        with open(file, "w") as f:
             json.dump(
                 {
                     "screen_size": (self.screen_width, self.screen_height),
                     "stay_duration": self.stay_duration,
                     "data": self.collected_data
                 }, f, indent=4)
-            print("Validation Data saved!")
+            print(f"Validation Data saved: {file}!")
 
 def run_validation_window():
     app = qtw.QApplication(sys.argv)

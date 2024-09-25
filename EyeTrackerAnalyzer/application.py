@@ -8,7 +8,7 @@ import dash
 import datetime
 import numpy as np
 import pandas as pd
-from EyeTrackerAnalyzer import WARN, __version__
+from EyeTrackerAnalyzer import __version__, __datapath__
 from EyeTrackerAnalyzer.components.window import run_validation_window
 from EyeTrackerAnalyzer.components.track import Tracker
 import EyeTrackerAnalyzer.components.utils as eta_utils
@@ -19,6 +19,7 @@ import plotly.express as px
 import plotly.graph_objs as go
 from collections import deque
 import pylsl
+import pathlib
 
 class Variable:
     inlet = None
@@ -109,8 +110,16 @@ app.layout = dbc.Container([
                         ),
                         dash.dcc.Checklist(
                             options=[
+                                {"label": " Enable Fixation", "value": "fixation"},
+                            ],
+                            value=[],
+                            id="fixation-options",
+                        ),
+                        dbc.Label("Velocity Threshold", className="my-2"),
+                        dbc.Input(id="fixation-velocity", type="number", value=1.5),
+                        dash.dcc.Checklist(
+                            options=[
                                 {"label": " Push to stream (tobii_gaze)", "value": "push_stream"},
-                                {"label": " Add Fixation duration", "value": "fixation"},
                                 {"label": " Remove screen NaN (default: 0)", "value": "dont_screen_nans"},
                                 {"label": " Verbose", "value": "verbose"}
                             ],
@@ -205,6 +214,7 @@ def run_tracker(params):
         data_rate=params['data_rate'],
         use_mock=params['use_mock'],
         fixation=params['fixation'],
+        velocity_threshold=params['velocity_threshold'],
         screen_nans=not params['dont_screen_nans'],
         verbose=params['verbose'],
         push_stream=params['push_stream'],
@@ -220,15 +230,18 @@ def run_tracker(params):
         Input("start_lsl_stream", "n_clicks"),
         Input("tracker-type", "value"),
         Input("tracker-data-rate", "value"),
+        Input("fixation-options", "value"),
+        Input("fixation-velocity", "value"),
         Input("tracker-extra-options", "value"),
     ]
 )
-def start_lsl_stream(n_clicks, tracker_type, data_rate, extra_options):
+def start_lsl_stream(n_clicks, tracker_type, data_rate, fixation, velocity, extra_options):
     if n_clicks:
         tracker_params = {
             'data_rate': data_rate or 600,
             'use_mock': tracker_type == "mock",
-            'fixation': "fixation" in extra_options,
+            'fixation': "fixation" in fixation,
+            'velocity_threshold': velocity,
             'dont_screen_nans': "dont_screen_nans" in extra_options,
             'verbose': "verbose" in extra_options,
             'push_stream': "push_stream" in extra_options,
@@ -373,14 +386,15 @@ def update_stream_status(data):
     ],
 )
 def update_graph_gaze(n_intervals, data):
+    screen_height, screen_width = 1, 1
     if data["inlet"] is not None:
         while True:
             sample, _ = var.inlet.pull_sample(timeout=0.0)
             if sample is None:
                 break
 
-            current_time = datetime.datetime.fromtimestamp(sample[8])
-            screen_width, screen_height = sample[6], sample[7]
+            current_time = datetime.datetime.fromtimestamp(sample[-2])
+            screen_width, screen_height = sample[-4], sample[-3]
             gaze_x = int(sample[0] * screen_width)
             gaze_y = int(sample[1] * screen_height)
 
@@ -408,28 +422,28 @@ def update_graph_gaze(n_intervals, data):
     return dbc.Alert("Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze stream`?",
                      color="danger", dismissable=True)
 
-def get_file_names(prefix):
-    if os.path.exists('data/'):
-        return [f for f in os.listdir('data/') if f.startswith(prefix)]
-    return []
-
 def render_metrics_tab():
-    gaze_files = get_file_names("gaze_data_")
-    validation_files = get_file_names("system_")
+    gaze_files = eta_utils.get_file_names("gaze_data_")
+    validation_files = eta_utils.get_file_names("system_")
 
     return dbc.Card(
         dbc.CardBody(
             dbc.Row([
                 dash.html.H3("Statistics: Eye Tracker Validation", className="mb-3"),
+                dash.dcc.Markdown(
+                    f'''
+                    Searching Data files at path: `{__datapath__}`
+                    '''
+                ),
                 dbc.Row([
                     dbc.Col(dash.dcc.Dropdown(
                         id='gaze-data-dropdown',
-                        options=[{'label': f, 'value': f} for f in gaze_files],
+                        options=[{'label': pathlib.Path(f).name, 'value': f} for f in gaze_files],
                         placeholder="Select Gaze Data File"
                     )),
                     dbc.Col(dash.dcc.Dropdown(
                         id='validation-data-dropdown',
-                        options=[{'label': f, 'value': f} for f in validation_files],
+                        options=[{'label': pathlib.Path(f).name, 'value': f} for f in validation_files],
                         placeholder="Select Validation File"
                     )),
                 ]),
@@ -463,8 +477,10 @@ def update_dropdown(gaze_data, validation_data):
         ts_gaze_data = re.search(r"gaze_data_(.*).json", gaze_data).group(1)
         ts_gaze_data = datetime.datetime.strptime(ts_gaze_data, "%Y%m%d_%H%M%S")
     if validation_data:
-        info_validation_data = re.search(r"system_(.*).json", validation_data).group(1)
-        info_validation_data = re.sub(r'_', " | ", info_validation_data)
+        info = re.search(r"system_(.*).json", validation_data).group(1)
+        info = info.split("_")
+        ts_validation_data = datetime.datetime.strptime("_".join(info[-2:]), "%Y%m%d_%H%M%S")
+        info_validation_data = " | ".join(info[:-2]) + f" | {ts_validation_data}"
     return dbc.Row(
         [
         dbc.Col(dash.html.I(f"Selected Gaze Data Timestamp: {ts_gaze_data}")),
@@ -480,8 +496,6 @@ def update_dropdown(gaze_data, validation_data):
 )
 def update_graph_metrics(n_clicks, gaze_data, validation_data):
     if n_clicks and gaze_data and validation_data:
-        gaze_data = os.path.abspath(f"data/{gaze_data}")
-        validation_data = os.path.abspath(f"data/{validation_data}")
         df_statistics = eta_validate.get_statistics(gaze_data, validation_data)
         content = dbc.Alert(
             "No data available for the selected files",
@@ -494,7 +508,7 @@ def update_graph_metrics(n_clicks, gaze_data, validation_data):
                     ),
                 ]
         return dbc.Card(
-            dbc.CardBody(content),
+            dbc.CardBody(content, class_name="table-responsive"),
             class_name="mt-3"
         )
     return dbc.Alert(
