@@ -111,10 +111,10 @@ class ValidationWindow(qtw.QMainWindow):
             print(f"Validation Data saved: {file}!")
 
 @click.command(name="window")
-def run_validation_window():
+def main():
     app = qtw.QApplication(sys.argv)
     validation_window = ValidationWindow()
     sys.exit(app.exec())
 
 if __name__ == '__main__':
-    run_validation_window()
+    main()

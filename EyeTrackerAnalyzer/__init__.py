@@ -17,4 +17,3 @@ __all__ = [
     '__version__',
     '__datapath__'
 ]
-print(f"Version: {__version__}")
