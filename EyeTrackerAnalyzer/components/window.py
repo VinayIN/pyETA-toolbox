@@ -6,6 +6,7 @@ import random
 import datetime
 import json
 import os
+import click
 from EyeTrackerAnalyzer import __datapath__
 import EyeTrackerAnalyzer.components.utils as eta_utils
 
@@ -109,6 +110,7 @@ class ValidationWindow(qtw.QMainWindow):
                 }, f, indent=4)
             print(f"Validation Data saved: {file}!")
 
+@click.command(name="window")
 def run_validation_window():
     app = qtw.QApplication(sys.argv)
     validation_window = ValidationWindow()

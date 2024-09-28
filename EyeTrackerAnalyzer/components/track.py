@@ -4,6 +4,7 @@ import datetime
 import os
 import json
 import time
+import click
 
 from typing import Optional
 from mne_lsl import lsl
@@ -77,11 +78,11 @@ class Tracker:
                 raise ValueError("No eye tracker device/Mock found.")
         except Exception as e:
             raise ValueError(f"Error initializing the eye tracker: {e}")
+        self.__fixation_left = FixationTuple()
+        self.__fixation_right = FixationTuple()
         if self.fixation:
             min_cutoff = 0.004
             beta = 0.7
-            self.__fixation_left = FixationTuple()
-            self.__fixation_right = FixationTuple()
             self.__one_euro_filter = self.create_filter(
                 min_cutoff,
                 beta,
@@ -282,42 +283,34 @@ class Tracker:
             LOGGER.debug(f"Error stopping tracking: {e}")
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--push_stream", action="store_true",
-                        help="Push the data to LSL stream."),
-    parser.add_argument("--data_rate", default=600, type=int,
-                        help="The rate of the data stream.")
-    parser.add_argument("--use_mock", action="store_true",
-                        help="Use this to start the mock service")
-    parser.add_argument("--fixation", action="store_true",
-                        help="Use this to add fixations duration to the data stream")
-    parser.add_argument("--velocity", type=float, default=1.5,
-                        help="The velocity threshold for fixation")
-    parser.add_argument("--dont_screen_nans", action="store_true",
-                        help="Use this to avoid correcting for NaNs")
-    parser.add_argument("--save_data", action="store_true",
-                        help="Save the data to a file")
-    parser.add_argument("--verbose", action="store_true",
-                        help="Use this to display LOGGER.debug statements")
-    parser.add_argument("--duration", type=float,
-                        help="The duration for which to track the data")
-    args = parser.parse_args()
-
-    LOGGER.debug(f"Arguments: {args}")
-
+@click.command(name="track")
+@click.option("--push_stream", is_flag=True, help="Push the data to LSL stream.")
+@click.option("--data_rate", default=600, type=int, help="The rate of the data stream.")
+@click.option("--use_mock", is_flag=True, help="Use this to start the mock service")
+@click.option("--fixation", is_flag=True, help="Use this to add fixations duration to the data stream")
+@click.option("--velocity", type=float, default=1.5, help="The velocity threshold for fixation")
+@click.option("--dont_screen_nans", is_flag=True, help="Use this to avoid correcting for NaNs")
+@click.option("--save_data", is_flag=True, help="Save the data to a file")
+@click.option("--verbose", is_flag=True, help="Use this to display LOGGER.debug statements")
+@click.option("--duration", type=float, help="The duration for which to track the data")
+def main(push_stream, data_rate, use_mock, fixation, velocity, dont_screen_nans, save_data, verbose, duration):
+    LOGGER.debug(f"Arguments: {locals()}")
     tracker = Tracker(
-        data_rate=args.data_rate,
-        use_mock=args.use_mock,
-        fixation=args.fixation,
-        velocity_threshold=args.velocity,
-        screen_nans=not args.dont_screen_nans,
-        verbose=args.verbose,
-        push_stream=args.push_stream,
-        save_data=args.save_data
+        data_rate=data_rate,
+        use_mock=use_mock,
+        fixation=fixation,
+        velocity_threshold=velocity,
+        screen_nans=not dont_screen_nans,
+        verbose=verbose,
+        push_stream=push_stream,
+        save_data=save_data
     )
-    if args.duration:
-        LOGGER.debug(f"Tracking for {args.duration} seconds...")
-        tracker.start_tracking(duration=args.duration)
+    if duration:
+        LOGGER.debug(f"Tracking for {duration} seconds...")
+        tracker.start_tracking(duration=duration)
     else:
         tracker.start_tracking()
+
+
+if __name__ == '__main__':
+    main()
