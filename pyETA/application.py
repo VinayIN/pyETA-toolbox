@@ -8,11 +8,11 @@ import dash
 import datetime
 import numpy as np
 import pandas as pd
-from EyeTrackerAnalyzer import __version__, __datapath__
-from EyeTrackerAnalyzer.components.window import run_validation_window
-from EyeTrackerAnalyzer.components.track import Tracker
-import EyeTrackerAnalyzer.components.utils as eta_utils
-import EyeTrackerAnalyzer.components.validate as eta_validate
+from pyETA import __version__, __datapath__
+from pyETA.components.window import main as run_validation_window
+from pyETA.components.track import Tracker
+import pyETA.components.utils as eta_utils
+import pyETA.components.validate as eta_validate
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
 import plotly.express as px
@@ -82,7 +82,7 @@ app.layout = dbc.Container([
         dbc.Col([
             dash.dcc.Markdown(
                 f"""
-                Version: `{__version__}`
+                pyETA, Version: `{__version__}`
 
                 This interface allows you to validate the eye tracker accuracy along with the following:
                 - View gaze points

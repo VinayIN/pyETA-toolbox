@@ -2,8 +2,8 @@ import datetime
 import pytest
 import math
 import random
-from EyeTrackerAnalyzer.components.utils import OneEuroFilter
-from EyeTrackerAnalyzer import LOGGER
+from pyETA.components.utils import OneEuroFilter
+from pyETA import LOGGER
 
 def generate_synthetic_data(num_points, noise_amplitude=0.1, frequency=1):
     data = []

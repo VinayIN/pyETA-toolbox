@@ -3,7 +3,7 @@ import numpy as np
 from typing import Dict, List, Tuple
 import json
 from datetime import timedelta
-import EyeTrackerAnalyzer.components.utils as eta_utils
+import pyETA.components.utils as eta_utils
 
 def calculate_statistics(df: pd.DataFrame, screen_width: int, screen_height: int) -> pd.DataFrame:
     target = df.screen_position.iloc[0]

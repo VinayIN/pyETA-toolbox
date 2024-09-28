@@ -4,7 +4,7 @@ import argparse
 import time
 from threading import Thread
 from pynput import mouse
-import EyeTrackerAnalyzer.components.utils as eta_utils
+import pyETA.components.utils as eta_utils
 
 EYETRACKER_GAZE_DATA = 'mock_gaze_data'
 CAPABILITY_HAS_GAZE_DATA = 'mock_has_gaze_data'

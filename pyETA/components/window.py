@@ -7,8 +7,8 @@ import datetime
 import json
 import os
 import click
-from EyeTrackerAnalyzer import __datapath__
-import EyeTrackerAnalyzer.components.utils as eta_utils
+from pyETA import __datapath__
+import pyETA.components.utils as eta_utils
 
 class ValidationWindow(qtw.QMainWindow):
     def __init__(self):

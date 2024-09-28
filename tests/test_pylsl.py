@@ -3,7 +3,7 @@ import pylsl
 import asyncio
 import time
 import random
-from EyeTrackerAnalyzer import LOGGER
+from pyETA import LOGGER
 
 async def send_data(duration):
     info = pylsl.StreamInfo('TestStream', 'Markers', 1, 100, 'string', 'myuid34234')

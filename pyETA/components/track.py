@@ -10,9 +10,9 @@ from typing import Optional
 from mne_lsl import lsl
 from collections import namedtuple
 from dataclasses import dataclass
-from EyeTrackerAnalyzer import __datapath__, LOGGER
-import EyeTrackerAnalyzer.components.mock as eta_mock
-import EyeTrackerAnalyzer.components.utils as eta_utils
+from pyETA import __datapath__, LOGGER
+import pyETA.components.mock as eta_mock
+import pyETA.components.utils as eta_utils
 try:
     import tobii_research as tr
 except ModuleNotFoundError:

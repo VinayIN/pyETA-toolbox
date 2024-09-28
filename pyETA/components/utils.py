@@ -7,7 +7,7 @@ from typing import List, Optional
 import PyQt6.QtWidgets as qtw
 import os
 import glob
-from EyeTrackerAnalyzer import __datapath__
+from pyETA import __datapath__
 
 def get_current_screen_size():
     app = qtw.QApplication.instance()

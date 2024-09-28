@@ -5,7 +5,7 @@ import random
 from mne_lsl import lsl
 from mne_lsl.stream import StreamLSL
 import numpy as np
-from EyeTrackerAnalyzer import LOGGER
+from pyETA import LOGGER
 
 async def send_data(duration):
     info = lsl.StreamInfo('TestStream', 'Markers', 2, 100, 'float32', 'uid001')

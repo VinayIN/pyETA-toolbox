@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "EyeTrackerAnalyzer"
+name = "pyETA"
 version = "0.0.1"
 description = "This toolbox provides a realtime visualization of eye tracking data to be used for designing passive BCI system."
 authors = ["Binay Kumar Pradhan <pradhan.binay@b-tu.de>"]
@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/VinayIN/EyeTrackerAnalyzer"
 keywords = ["eyetracker", "tobii", "mock tobii", "passiveBCI"]
 packages = [
-    { include = "EyeTrackerAnalyzer" }
+    { include = "pyETA" }
 ]
 
 [tool.poetry.dependencies]
@@ -40,4 +40,4 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-pyETA = "EyeTrackerAnalyzer.cli:main"
+pyETA = "pyETA.cli:main"
