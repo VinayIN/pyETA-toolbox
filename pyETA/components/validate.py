@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple
 import json
 from datetime import timedelta
 import pyETA.components.utils as eta_utils
+from pyETA import LOGGER
 
 def calculate_statistics(df: pd.DataFrame, screen_width: int, screen_height: int) -> pd.DataFrame:
     target = df.screen_position.iloc[0]
@@ -39,13 +40,15 @@ def load_data(screen_file: str, gaze_file: str) -> Tuple[pd.DataFrame, pd.DataFr
     with open(gaze_file, 'r') as f:
         tracker_data = json.load(f)
     
+    gaze_screen_size = screen_data["screen_size"]
+    tracker_screen_size = tracker_data["screen_size"]
     df_screen_data = pd.DataFrame(data=screen_data["data"]).dropna()
     df_screen_data.index.name = 'group'
     df_screen_data = df_screen_data.reset_index()
     
     df_tracker_data = pd.DataFrame(data=tracker_data["data"]).dropna()
-    
-    return df_screen_data, df_tracker_data
+    data = {"gaze": (gaze_screen_size, df_screen_data), "tracker": (tracker_screen_size, df_tracker_data)}
+    return data
 
 def preprocess_data(df_screen_data: pd.DataFrame, df_tracker_data: pd.DataFrame, screen_width: int, screen_height: int) -> pd.DataFrame:
     df_screen_data['timestamp_0'] = pd.to_datetime(df_screen_data['timestamp'], unit='s')
@@ -111,9 +114,9 @@ def calculate_euler(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def get_statistics(gaze_file: str, screen_file: str) -> pd.DataFrame:
-    screen_width = 1512
-    screen_height = 982
-    df_screen_data, df_tracker_data = load_data(screen_file, gaze_file)
+    data = load_data(screen_file, gaze_file)
+    screen_width, screen_height = data.get("tracker")[0]
+    df_screen_data, df_tracker_data = data.get("gaze")[1], data.get("tracker")[1]
     if df_screen_data.empty or df_tracker_data.empty:
         return pd.DataFrame()
     df_screen_data, df_tracker_data = preprocess_data(df_screen_data, df_tracker_data, screen_width, screen_height)

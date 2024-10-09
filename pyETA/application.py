@@ -29,10 +29,8 @@ class Variable:
     left_gaze_x = deque(maxlen=max_data_points)
     left_gaze_y = deque(maxlen=max_data_points)
     buffer_times, buffer_x, buffer_y = [], [], []
-    state = False
 
     def refresh_gaze(self):
-        self.state = False
         self.times.clear()
         self.left_gaze_x.clear()
         self.left_gaze_y.clear()
@@ -115,7 +113,7 @@ app.layout = dbc.Container([
                             options=[
                                 {"label": " Enable Fixation", "value": "fixation"},
                             ],
-                            value=[],
+                            value=["fixation"],
                             id="fixation-options",
                         ),
                         dbc.Label("Velocity Threshold", className="my-2"),
@@ -391,7 +389,6 @@ def update_stream_status(data):
 )
 def update_graph_gaze(n_intervals, data):
     screen_height, screen_width = 1, 1
-    make_vline = False
     if data["inlet"] is not None:
         while True:
             sample, _ = var.inlet.pull_sample(timeout=0.0)
@@ -402,10 +399,6 @@ def update_graph_gaze(n_intervals, data):
             screen_width, screen_height = sample[-4], sample[-3]
             gaze_x = int(sample[0] * screen_width)
             gaze_y = int(sample[1] * screen_height)
-            fixation = sample[3]
-            if fixation != var.state:
-                make_vline = True
-                var.state = fixation
 
             var.buffer_times.append(current_time)
             var.buffer_x.append(gaze_x)
@@ -419,9 +412,7 @@ def update_graph_gaze(n_intervals, data):
         fig = go.Figure(skip_invalid=True)
         fig.add_trace(go.Scatter(x=list(var.times), y=list(var.left_gaze_x), mode='lines', name='Gaze X'))
         fig.add_trace(go.Scatter(x=list(var.times), y=list(var.left_gaze_y), mode='lines', name='Gaze Y'))
-        if make_vline:
-            fig.add_vline(x=current_time-5, line_dash="dash", line_color="red", line_width=1)
-
+        
         if len(var.times) > 0:
             fig.update_layout(
                 title='Eye Gaze Data Over Time',
