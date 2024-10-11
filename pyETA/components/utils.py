@@ -13,20 +13,34 @@ def get_current_screen_size():
     app = qtw.QApplication.instance()
     if app is None:
         app = qtw.QApplication(sys.argv)
+    
+    screen_dialog = qtw.QDialog()
+    screen_dialog.setWindowTitle("Select Screen")
+    layout = qtw.QVBoxLayout(screen_dialog)
 
-    screen = app.primaryScreen()
-    size = screen.size()
-    width, height = size.width(), size.height()
-    app.quit()
-    return width, height
+    screen_combo = qtw.QComboBox()
+    for i, screen in enumerate(app.screens()):
+        screen_combo.addItem(f"Screen {i+1}")
+    layout.addWidget(screen_combo)
+
+    button_box = qtw.QDialogButtonBox(qtw.QDialogButtonBox.StandardButton.Ok | 
+                                      qtw.QDialogButtonBox.StandardButton.Cancel)
+    button_box.accepted.connect(screen_dialog.accept)
+    button_box.rejected.connect(screen_dialog.reject)
+    layout.addWidget(button_box)
+
+    if screen_dialog.exec() == qtw.QDialog.DialogCode.Accepted:
+        selected_screen = app.screens()[screen_combo.currentIndex()]
+        size = selected_screen.size()
+        return size.width(), size.height()
+    return None, None
 
 def get_system_info():
     node = platform.node()
     system = platform.system()
     machine = platform.machine()
-    width, height = get_current_screen_size()
     time_now = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    return f"{node}_{system}_{machine}_{width}x{height}_{time_now}"
+    return f"{node}_{system}_{machine}_{time_now}"
 
 def get_timestamp():
     return datetime.datetime.now().timestamp()
