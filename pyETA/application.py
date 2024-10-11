@@ -9,7 +9,7 @@ import datetime
 import numpy as np
 import pandas as pd
 from pyETA import __version__, __datapath__
-from pyETA.components.window import main as run_validation_window
+import pyETA.components.window as window
 from pyETA.components.track import Tracker
 import pyETA.components.utils as eta_utils
 import pyETA.components.validate as eta_validate
@@ -120,7 +120,7 @@ app.layout = dbc.Container([
                         dbc.Input(id="fixation-velocity", type="number", value=1.5),
                         dash.dcc.Checklist(
                             options=[
-                                {"label": " Push to stream (tobii_gaze)", "value": "push_stream"},
+                                {"label": " Push to stream (tobii_gaze_fixation)", "value": "push_stream"},
                                 {"label": " Remove screen NaN (default: 0)", "value": "dont_screen_nans"},
                                 {"label": " Verbose", "value": "verbose"}
                             ],
@@ -158,7 +158,7 @@ app.layout = dbc.Container([
     ]),
     dbc.Spinner([
         dash.dcc.Store(id="stream-store", data={"inlet": None, "message": "Not connected to stream"}),
-        dbc.Button("Fetch tobii_gaze Stream", color="secondary", outline=True, id="fetch_stream", class_name="my-2"),
+        dbc.Button("Fetch tobii_gaze_fixation Stream", color="secondary", outline=True, id="fetch_stream", class_name="my-2"),
         dash.html.Div(id="stream-status")],
         delay_show=100
     ),
@@ -189,12 +189,9 @@ app.layout = dbc.Container([
 )
 def update_window(n_clicks, value):
     if n_clicks:
-        print(f"executing: {run_validation_window.__name__}")
         tracker_params = {
-            'data_rate': 600,
             'use_mock': value == "mock",
             'fixation': False,
-            'dont_screen_nans': True,
             'verbose': False,
             'push_stream': False,
             'save_data': True,
@@ -202,7 +199,7 @@ def update_window(n_clicks, value):
         }
         with multiprocessing.Pool(processes=2) as pool:
             tobii_result = pool.apply_async(run_tracker, args=(tracker_params,))
-            validation_result = pool.apply_async(run_validation_window)
+            validation_result = pool.apply_async(window.main)
             tobii_result.get()
             validation_result.get()
         print("validation window closed")
@@ -211,16 +208,7 @@ def update_window(n_clicks, value):
 
 def run_tracker(params):
     duration = params.get("duration")
-    tracker = Tracker(
-        data_rate=params['data_rate'],
-        use_mock=params['use_mock'],
-        fixation=params['fixation'],
-        velocity_threshold=params['velocity_threshold'],
-        screen_nans=not params['dont_screen_nans'],
-        verbose=params['verbose'],
-        push_stream=params['push_stream'],
-        save_data=params['save_data']
-    )
+    tracker = Tracker(**params)
     if duration is not None:
         print(f"Total Duration: {duration}")
     tracker.start_tracking(duration=duration)
@@ -342,7 +330,7 @@ def get_available_stream():
         streams = pylsl.resolve_streams(wait_time=1)
         inlet = pylsl.StreamInlet(streams[0])
         message = f"Connected to stream: {inlet.info().name()}"
-        expected_name = "tobii_gaze"
+        expected_name = "tobii_gaze_fixation"
         if inlet.info().name() == expected_name:
             return inlet, message
         message = f"Invalid stream name. Expected: {expected_name}"
@@ -421,7 +409,7 @@ def update_graph_gaze(n_intervals, data):
                 showlegend=True
             )
         return dbc.Card(dbc.CardBody(dash.dcc.Graph(figure=fig)))
-    return dbc.Alert("Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze stream`?",
+    return dbc.Alert("Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze_fixation stream`?",
                      color="danger", dismissable=True)
 
 def render_metrics_tab():
@@ -465,7 +453,7 @@ def update_graph_fixation(data):
     if data["inlet"] is not None:
         pass
     return dbc.Alert(
-        "Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze stream`?",
+        "Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze_fixation stream`?",
         color="danger", dismissable=True)
 
 @app.callback(

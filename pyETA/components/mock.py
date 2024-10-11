@@ -58,7 +58,6 @@ class MockEyeTracker(Thread):
 
     def run(self):
         self.listener = mouse.Listener(on_move=self.on_move)
-        print(f"mock trusted: {self.listener.IS_TRUSTED}")
         with self.listener as lis:
             while not self.should_stop:
                 time.sleep(.99 / self.data_rate)

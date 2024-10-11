@@ -41,7 +41,8 @@ class Tracker:
             screen_nans=True,
             verbose=False,
             push_stream=False,
-            save_data=False
+            save_data=False,
+            **kwargs
         ):
         self.screen_width, self.screen_height = eta_utils.get_current_screen_size()
         self.data_rate = data_rate
@@ -90,7 +91,7 @@ class Tracker:
 
         if self.push_stream:
             debug = lsl.StreamInfo(
-                name='tobii_gaze',
+                name='tobii_gaze_fixation',
                 stype='Gaze',
                 n_channels=22,
                 sfreq=self.data_rate,
