@@ -8,8 +8,8 @@ import dash
 import datetime
 import numpy as np
 import pandas as pd
-from pyETA import __version__, __datapath__
-import pyETA.components.window as window
+from pyETA import __version__, __datapath__, LOGGER
+from pyETA.components.window import run_validation_window
 from pyETA.components.track import Tracker
 import pyETA.components.utils as eta_utils
 import pyETA.components.validate as eta_validate
@@ -199,10 +199,10 @@ def update_window(n_clicks, value):
         }
         with multiprocessing.Pool(processes=2) as pool:
             tobii_result = pool.apply_async(run_tracker, args=(tracker_params,))
-            validation_result = pool.apply_async(window.main)
-            tobii_result.get()
+            validation_result = pool.apply_async(run_validation_window)
             validation_result.get()
-        print("validation window closed")
+            tobii_result.get()
+        LOGGER.info("validation window closed")
         return 1
     return 0
 
@@ -210,7 +210,7 @@ def run_tracker(params):
     duration = params.get("duration")
     tracker = Tracker(**params)
     if duration is not None:
-        print(f"Total Duration: {duration}")
+        LOGGER.info(f"Total Duration: {duration}")
     tracker.start_tracking(duration=duration)
 
 @app.callback(
@@ -265,10 +265,10 @@ def stop_lsl_stream(n_clicks, pid):
     if n_clicks and pid:
         try:
             os.kill(pid, signal.SIGINT)
-            print(f"Process with PID {pid} stopped.")
+            LOGGER.info(f"Process with PID {pid} stopped.")
             return 1
         except ProcessLookupError:
-            print(f"Process with PID {pid} not found.")
+            LOGGER.info(f"Process with PID {pid} not found.")
     return 0
 
 
@@ -285,13 +285,13 @@ def update_button_states(pid):
 )
 def render_tab_content(active_tab):
     if active_tab == "eye-tracker-gaze":
-        print("plotting gaze points")
+        LOGGER.info("plotting gaze points")
         return render_tab(tab_type="gaze")
     elif active_tab == "eye-tracker-fixation":
-        print("plotting fixation points")
+        LOGGER.info("plotting fixation points")
         return render_tab(tab_type="fixation")
     elif active_tab == "eye-tracker-metrics":
-        print("plotting metrics")
+        LOGGER.info("plotting metrics")
         return render_metrics_tab()
     return "No tab selected"
 
@@ -319,14 +319,14 @@ def render_tab(tab_type):
 )
 def clear_data(n_clicks):
     if n_clicks:
-        print("Refresh button clicked gaze")
+        LOGGER.info("Refresh button clicked gaze")
         var.refresh_gaze()
     return n_clicks
 
 def get_available_stream():
     message = "No fetching performed"
     try:
-        print("Fetching stream")
+        LOGGER.info("Fetching stream")
         streams = pylsl.resolve_streams(wait_time=1)
         inlet = pylsl.StreamInlet(streams[0])
         message = f"Connected to stream: {inlet.info().name()}"
@@ -349,7 +349,7 @@ def get_inlet(n_clicks):
         if var.inlet is None:
             var.inlet, message = get_available_stream()
             name = var.inlet.info().name() if var.inlet else None
-            print(message)
+            LOGGER.info(message)
         else:
             name = var.inlet.info().name()
             message = "Already connected to stream"

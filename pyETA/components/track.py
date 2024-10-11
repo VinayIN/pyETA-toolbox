@@ -100,7 +100,7 @@ class Tracker:
             self.lsl_gaze_outlet = lsl.StreamOutlet(debug)
             LOGGER.info(f"LSL Stream Info: {self.lsl_gaze_outlet.get_sinfo()}")
         LOGGER.info(f"Member Variables: {vars(self)}")
-        LOGGER.info("Press Ctrl+C to stop tracking...")
+        print("Press Ctrl+C to stop tracking...")
     
     def create_filter(self, min_cutoff, beta, elements: list):
         Filter = namedtuple('Filter', elements)
@@ -126,65 +126,64 @@ class Tracker:
                 is_fixated = True
             LOGGER.debug(f"Distance: {distance}, Elapsed_Time: {elapsed_time}, Velocity: {velocity}")
             return is_fixated, velocity, elapsed_time
-        if self.fixation:
-            if element == "left_eye":
-                previous_t = min(self.__one_euro_filter.left_eye_x.previous_time, self.__one_euro_filter.left_eye_y.previous_time)
-                
-                # filter for x
-                filtered_x = self.__one_euro_filter.left_eye_x(t, x)
-                # filter for y
-                filtered_y = self.__one_euro_filter.left_eye_y(t, y)
-                LOGGER.debug(f"{element}: {previous_t}, {t}, ({x}, {filtered_x}),  ({y}, {filtered_y})")
-                is_fixated, velocity, elapsed_time = calculate(previous_t, t, filtered_x, filtered_y)
-                self.__fixation_left.x = x
-                self.__fixation_left.y = y
-                self.__fixation_left.filtered_x = filtered_x
-                self.__fixation_left.filtered_y = filtered_y
-                self.__fixation_left.velocity = velocity
-                self.__fixation_left.is_fixated = is_fixated
-                self.__fixation_left.timestamp = t if not is_fixated else self.__fixation_left.timestamp
-                self.__fixation_left.elapsed_time = elapsed_time
-                self.__fixation_left.duration = self.__fixation_left.duration + elapsed_time if is_fixated else 0
-            elif element == "right_eye":
-                previous_t = min(self.__one_euro_filter.right_eye_x.previous_time, self.__one_euro_filter.right_eye_y.previous_time)
-                
-                # filter for x
-                filtered_x = self.__one_euro_filter.right_eye_x(t, x)
-                # filter for y
-                filtered_y = self.__one_euro_filter.right_eye_y(t, y)
-                LOGGER.debug(f"{element}: {previous_t}, {t}, ({x}, {filtered_x}),  ({y}, {filtered_y})")
-                is_fixated, velocity, elapsed_time = calculate(previous_t, t, filtered_x, filtered_y)
-                self.__fixation_right.x = x
-                self.__fixation_right.y = y
-                self.__fixation_right.filtered_x = filtered_x
-                self.__fixation_right.filtered_y = filtered_y
-                self.__fixation_right.velocity = velocity
-                self.__fixation_right.is_fixated = is_fixated
-                self.__fixation_right.timestamp = t if not is_fixated else self.__fixation_right.timestamp
-                self.__fixation_right.elapsed_time = elapsed_time
-                self.__fixation_right.duration = self.__fixation_right.duration + elapsed_time if is_fixated else 0
-            else:
-                raise ValueError(f"Unknown element: {element}")
-        return FixationTuple()
+        if element == "left_eye":
+            previous_t = min(self.__one_euro_filter.left_eye_x.previous_time, self.__one_euro_filter.left_eye_y.previous_time)
+            
+            # filter for x
+            filtered_x = self.__one_euro_filter.left_eye_x(t, x)
+            # filter for y
+            filtered_y = self.__one_euro_filter.left_eye_y(t, y)
+            LOGGER.debug(f"{element}: {previous_t}, {t}, ({x}, {filtered_x}),  ({y}, {filtered_y})")
+            is_fixated, velocity, elapsed_time = calculate(previous_t, t, filtered_x, filtered_y)
+            self.__fixation_left.x = x
+            self.__fixation_left.y = y
+            self.__fixation_left.filtered_x = filtered_x
+            self.__fixation_left.filtered_y = filtered_y
+            self.__fixation_left.velocity = velocity
+            self.__fixation_left.is_fixated = is_fixated
+            self.__fixation_left.timestamp = t if not is_fixated else self.__fixation_left.timestamp
+            self.__fixation_left.elapsed_time = elapsed_time
+            self.__fixation_left.duration = self.__fixation_left.duration + elapsed_time if is_fixated else 0
+        elif element == "right_eye":
+            previous_t = min(self.__one_euro_filter.right_eye_x.previous_time, self.__one_euro_filter.right_eye_y.previous_time)
+            
+            # filter for x
+            filtered_x = self.__one_euro_filter.right_eye_x(t, x)
+            # filter for y
+            filtered_y = self.__one_euro_filter.right_eye_y(t, y)
+            LOGGER.debug(f"{element}: {previous_t}, {t}, ({x}, {filtered_x}),  ({y}, {filtered_y})")
+            is_fixated, velocity, elapsed_time = calculate(previous_t, t, filtered_x, filtered_y)
+            self.__fixation_right.x = x
+            self.__fixation_right.y = y
+            self.__fixation_right.filtered_x = filtered_x
+            self.__fixation_right.filtered_y = filtered_y
+            self.__fixation_right.velocity = velocity
+            self.__fixation_right.is_fixated = is_fixated
+            self.__fixation_right.timestamp = t if not is_fixated else self.__fixation_right.timestamp
+            self.__fixation_right.elapsed_time = elapsed_time
+            self.__fixation_right.duration = self.__fixation_right.duration + elapsed_time if is_fixated else 0
+        else:
+            raise ValueError(f"Unknown element: {element}")
 
     def _collect_gaze_data(self, gaze_data):
         timestamp = eta_utils.get_timestamp()
         LOGGER.debug(f"gaze: {timestamp}")
-        # left eye
-        self._update_fixation_data(
-                t=timestamp,
-                x=gaze_data.get("left_gaze_point_on_display_area")[0],
-                y=gaze_data.get("left_gaze_point_on_display_area")[1],
-                element="left_eye"
-            )
-        
-        # right eye
-        self._update_fixation_data(
-                t=timestamp,
-                x=gaze_data.get("right_gaze_point_on_display_area")[0],
-                y=gaze_data.get("right_gaze_point_on_display_area")[1],
-                element="right_eye"
-            )
+        if self.fixation:
+            # left eye
+            self._update_fixation_data(
+                    t=timestamp,
+                    x=gaze_data.get("left_gaze_point_on_display_area")[0],
+                    y=gaze_data.get("left_gaze_point_on_display_area")[1],
+                    element="left_eye"
+                )
+            
+            # right eye
+            self._update_fixation_data(
+                    t=timestamp,
+                    x=gaze_data.get("right_gaze_point_on_display_area")[0],
+                    y=gaze_data.get("right_gaze_point_on_display_area")[1],
+                    element="right_eye"
+                )
         data = {
             "timestamp": timestamp,
             "device_time_stamp": gaze_data.get("device_time_stamp"),
