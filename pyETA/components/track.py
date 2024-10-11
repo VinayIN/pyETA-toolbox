@@ -268,7 +268,7 @@ class Tracker:
                                 "screen_size": (self.screen_width, self.screen_height),
                                 "data": self.gaze_data
                             }, f, indent=4)
-                    LOGGER.debug(f"Gaze Data saved: {file}!")
+                    LOGGER.info(f"Gaze Data saved: {file}!")
         else:
             LOGGER.debug("No eye tracker found!")
 

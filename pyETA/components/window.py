@@ -7,7 +7,7 @@ import datetime
 import json
 import os
 import click
-from pyETA import __datapath__
+from pyETA import __datapath__, LOGGER
 import pyETA.components.utils as eta_utils
 
 class ValidationWindow(qtw.QMainWindow):
@@ -53,7 +53,7 @@ class ValidationWindow(qtw.QMainWindow):
         else:
             self.circle.hide()
             self.process_data()
-            print("Sequence completed!")
+            LOGGER.info("Sequence completed!")
             qtc.QTimer.singleShot(self.stay_duration, self.close)
 
     def move_to_next_position(self):
@@ -108,7 +108,7 @@ class ValidationWindow(qtw.QMainWindow):
                     "stay_duration": self.stay_duration,
                     "data": self.collected_data
                 }, f, indent=4)
-            print(f"Validation Data saved: {file}!")
+            LOGGER.info(f"Validation Data saved: {file}!")
 
 def run_validation_window():
     app = qtw.QApplication(sys.argv)
