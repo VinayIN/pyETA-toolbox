@@ -23,11 +23,11 @@ import numpy as np
 class FixationTuple:
     is_fixated: bool = False
     velocity: float = 0.0
-    x: float = np.nan
-    y: float = np.nan
-    filtered_x: float = np.nan
-    filtered_y: float = np.nan
-    timestamp: float = np.nan
+    x: float = 0.0
+    y: float = 0.0
+    filtered_x: float = 0.0
+    filtered_y: float = 0.0
+    timestamp: float = 0.0
     elapsed_time: float = 0.0
     duration: float = 0.0
 
@@ -82,8 +82,8 @@ class Tracker:
         self.__fixation_left = FixationTuple()
         self.__fixation_right = FixationTuple()
         if self.fixation:
-            min_cutoff = 0.004
-            beta = 0.7
+            min_cutoff = 1.5
+            beta = 1
             self.__one_euro_filter = self.create_filter(
                 min_cutoff,
                 beta,

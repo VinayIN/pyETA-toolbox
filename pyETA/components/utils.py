@@ -5,9 +5,10 @@ import platform
 import datetime
 from typing import List, Optional
 import PyQt6.QtWidgets as qtw
+import numpy as np
 import os
 import glob
-from pyETA import __datapath__
+from pyETA import __datapath__, LOGGER
 
 def get_current_screen_size(dialog=False):
     app = qtw.QApplication.instance()
@@ -75,7 +76,7 @@ class OneEuroFilter:
             time_elapsed: float,
             cutoff_frequency: float) -> float:
             r = 2 * math.pi * cutoff_frequency * time_elapsed
-            return r / (r + 1)
+            return self.__no_nan(r) / (self.__no_nan(r) + 1)
 
     def exp_smoothing(
             self,
@@ -83,24 +84,30 @@ class OneEuroFilter:
             current_value: float,
             previous_value: float
         ) -> float:
-        return alpha * current_value + (1 - alpha) * previous_value
+        return self.__no_nan(alpha) * self.__no_nan(current_value) + (1 - self.__no_nan(alpha)) * self.__no_nan(previous_value)
+    
+    def __no_nan(self, value):
+        return value if not np.isnan(value) else 0.0
 
     def __call__(self, current_time: float, current_value: float) -> float:
         """Compute the filtered signal."""
         time_elapsed = current_time - self.previous_time
+        LOGGER.debug(f"time elapsed: {time_elapsed}")
 
         # The filtered derivative of the signal.
         alpha_derivative = self.smoothing_factor(time_elapsed, self.derivative_cutoff)
         current_derivative = (current_value - self.previous_value) / time_elapsed
         filtered_derivative = self.exp_smoothing(alpha_derivative, current_derivative, self.previous_derivative)
+        LOGGER.debug(f"alpha_derivative: {alpha_derivative}, current_derivative: {current_derivative}, filtered_derivative: {filtered_derivative}")
 
         # The filtered signal.
         adaptive_cutoff = self.min_cutoff + self.beta * abs(filtered_derivative)
         alpha = self.smoothing_factor(time_elapsed, adaptive_cutoff)
         filtered_value = self.exp_smoothing(alpha, current_value, self.previous_value)
+        LOGGER.info(f"alpha: {alpha}, value: {current_value}, previous_value: {self.previous_value}, filtered: {filtered_value}")
 
         # Memorize the previous values.
-        self.previous_value = filtered_value
+        self.previous_value = filtered_value if not np.isnan(filtered_value) else 0.0
         self.previous_derivative = filtered_derivative
         self.previous_time = current_time
 
