@@ -6,135 +6,132 @@ from datetime import timedelta
 import pyETA.components.utils as eta_utils
 from pyETA import LOGGER
 
-def calculate_statistics(df: pd.DataFrame, screen_width: int, screen_height: int) -> pd.DataFrame:
-    target = df.screen_position.iloc[0]
-    e_target = eta_utils.get_euler_form(target)
-    
-    target_magnitude = (df.magnitude_left_from_target + df.magnitude_right_from_target) / 2
-    target_phase = (df.phase_left_from_target + df.phase_right_from_target) / 2
-    spread_magnitude = (df.magnitude_left_from_median + df.magnitude_right_from_median) / 2
-    spread_phase = (df.phase_left_from_median + df.phase_right_from_median) / 2
+def convert_window_to_screen_coordinates(point: Tuple[float, float], window: Tuple[int, int], screen: Tuple[int, int]) -> Tuple[float, float]:
+    x = (point[0] / window[0]) * screen[0]
+    y = (point[1] / window[1]) * screen[1]
+    return (x, y)
+
+def convert_screen_to_window_coordinates(point: Tuple[float, float], window: Tuple[int, int], screen: Tuple[int, int]) -> Tuple[float, float]:
+    x = (point[0] / screen[0]) * window[0]
+    y = (point[1] / screen[1]) * window[1]
+    return (x, y)
+
+def calculate_statistics(df: pd.DataFrame, window: Tuple[int, int], screen: Tuple[int, int]) -> pd.DataFrame:
+    target = eta_utils.get_actual_from_relative(df.target_relative.iloc[0], screen[0], screen[1])
+
+    mean_data = (df["left_eye_x"].mean() + df["right_eye_x"].mean())/2, (df["left_eye_y"].mean() + df["right_eye_y"].mean())/2
+    mean_data = eta_utils.get_actual_from_relative(mean_data, screen[0], screen[1])
 
     result = {
         "group": df.group.iloc[0],
-        "target_position": target,
-        "median_magnitude": np.median(target_magnitude),
-        "median_phase": np.median(target_phase)
+        "target position": target,
+        "spread of target to gaze points": (df["distance_left_from_target"].std() + df["distance_right_from_target"].std())/2,
+        "mean gaze point": mean_data,
+        "spread of mean to gaze points": (df["distance_left_from_mean"].std() + df["distance_right_from_mean"].std())/2,
     }
-    
-    median_position = eta_utils.get_cartesian(
-        euler=(result["median_magnitude"], result["median_phase"]),
-        reference=e_target
-    )
-    median_position = list(map(lambda x: float(x.round(3)), median_position))
-    result.update({
-        "median_position": median_position,
-        "std_spread": np.std(spread_magnitude)
-    })
-    
     return pd.DataFrame(data = [result])
 
-def load_data(screen_file: str, gaze_file: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    with open(screen_file, 'r') as f:
-        screen_data = json.load(f)
+def load_data(validate_file: str, gaze_file: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    with open(validate_file, 'r') as f:
+        validate_data = json.load(f)
     with open(gaze_file, 'r') as f:
-        tracker_data = json.load(f)
+        gaze_data = json.load(f)
     
-    gaze_screen_size = screen_data["screen_size"]
-    tracker_screen_size = tracker_data["screen_size"]
-    df_screen_data = pd.DataFrame(data=screen_data["data"]).dropna()
-    df_screen_data.index.name = 'group'
-    df_screen_data = df_screen_data.reset_index()
+    screen = gaze_data["screen_size"]
+    window = validate_data["screen_size"]
+    df_gaze_data = pd.DataFrame(data=gaze_data["data"])
     
-    df_tracker_data = pd.DataFrame(data=tracker_data["data"]).dropna()
-    data = {"gaze": (gaze_screen_size, df_screen_data), "tracker": (tracker_screen_size, df_tracker_data)}
+    df_validate_data = pd.DataFrame(data=validate_data["data"])
+    df_validate_data.index.name = 'group'
+    df_validate_data = df_validate_data.reset_index()
+    data = {"gaze": (screen, df_gaze_data), "validate": (window, df_validate_data)}
+    LOGGER.info(f"Screen resolution: {screen}")
+    LOGGER.info(f"Window resolution: {window}")
     return data
 
-def preprocess_data(df_screen_data: pd.DataFrame, df_tracker_data: pd.DataFrame, screen_width: int, screen_height: int) -> pd.DataFrame:
-    df_screen_data['timestamp_0'] = pd.to_datetime(df_screen_data['timestamp'], unit='s')
-    df_screen_data['timestamp_2'] = df_screen_data['timestamp_0'] + timedelta(seconds=2)
-    df_tracker_data['timestamp_0'] = pd.to_datetime(df_tracker_data['timestamp'], unit='s')
+def preprocess_data(df_gaze_data: pd.DataFrame, df_validate_data: pd.DataFrame, window: Tuple[int, int], screen: Tuple[int, int]) -> pd.DataFrame:
+    df_gaze_data['timestamp_0'] = pd.to_datetime(df_gaze_data['timestamp'], unit='s')
     
-    df_screen_data["target_relative"] = df_screen_data.screen_position.apply(
-        lambda x: eta_utils.get_relative_from_actual(x, screen_width, screen_height)
+    df_validate_data['timestamp_0'] = pd.to_datetime(df_validate_data['timestamp'], unit='s')
+    df_validate_data['timestamp_2'] = df_validate_data['timestamp_0'] + timedelta(seconds=2)
+
+    df_validate_data["screen_position_recalibrated"] = df_validate_data.screen_position.apply(
+        lambda x: convert_screen_to_window_coordinates(x, window=window, screen=screen))
+    df_validate_data["target_relative"] = df_validate_data.screen_position_recalibrated.apply(
+        lambda x: eta_utils.get_relative_from_actual(x, screen[0], screen[1])
     )
     
-    return df_screen_data, df_tracker_data
+    return df_gaze_data, df_validate_data
 
-def filter_and_group_data(df_screen_data: pd.DataFrame, df_tracker_data: pd.DataFrame) -> pd.DataFrame:
+def filter_and_group_data(df_gaze_data: pd.DataFrame, df_validate_data: pd.DataFrame) -> pd.DataFrame:
     groups = []
     
-    for _, row in df_screen_data.iterrows():
-        filtered_tracker_data = df_tracker_data[
-            (df_tracker_data['timestamp_0'] >= row['timestamp_0']) & 
-            (df_tracker_data['timestamp_0'] <= row['timestamp_2'])
+    for _, row in df_validate_data.iterrows():
+        filtered_gaze_data = df_gaze_data[
+            (df_gaze_data['timestamp_0'] >= row['timestamp_0']) & 
+            (df_gaze_data['timestamp_0'] <= row['timestamp_2'])
         ].copy()
         
-        if not filtered_tracker_data.empty:
-            filtered_tracker_data["group"] = row["group"]
-            groups.append(filtered_tracker_data)
+        if not filtered_gaze_data.empty:
+            filtered_gaze_data["group"] = row["group"]
+            groups.append(filtered_gaze_data)
     
     return pd.concat(groups, ignore_index=True)
 
-def calculate_euler(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_data(df: pd.DataFrame) -> pd.DataFrame:
     target = df.target_relative.iloc[0]
-    e_target = eta_utils.get_euler_form(target)
     
-    def apply_euler(eye_data):
-        euler = eta_utils.get_euler_form(eye_data["gaze_point"], reference=target)
-        return pd.Series({'magnitude': euler[0], 'phase': euler[1]})
+    def extract_distance_target(eye_data):
+        distance = eta_utils.get_distance(eye_data["gaze_point"], target)
+        return pd.Series({'distance': distance, 'x': eye_data["gaze_point"][0], 'y': eye_data["gaze_point"][1]})
     
-    left_euler = df.left_eye.apply(apply_euler)
-    right_euler = df.right_eye.apply(apply_euler)
+    left_eye_data = df.left_eye.apply(extract_distance_target)
+    right_eye_data = df.right_eye.apply(extract_distance_target)
+
+    df["left_eye_x"] = left_eye_data['x']
+    df["left_eye_y"] = left_eye_data['y']
+    df["right_eye_x"] = right_eye_data['x']
+    df["right_eye_y"] = right_eye_data['y']
+    mean_x = (left_eye_data['x'].mean() + right_eye_data['x'].mean()) / 2
+    mean_y = (left_eye_data['y'].mean() + right_eye_data['y'].mean()) / 2
+    df["distance_left_from_target"] = left_eye_data['distance']
+    df["distance_right_from_target"] = right_eye_data['distance']
+
+    def extract_distance_mean(eye_data):
+        distance = eta_utils.get_distance(eye_data["gaze_point"], (mean_x, mean_y))
+        return pd.Series({'distance': distance, 'x': eye_data["gaze_point"][0], 'y': eye_data["gaze_point"][1]})
     
-    df["magnitude_left_from_target"] = left_euler['magnitude']
-    df["magnitude_right_from_target"] = right_euler['magnitude']
-    df["phase_left_from_target"] = left_euler['phase']
-    df["phase_right_from_target"] = right_euler['phase']
-    
-    magnitude = (df.magnitude_left_from_target + df.magnitude_right_from_target) / 2
-    phases = (df.phase_left_from_target + df.phase_right_from_target) / 2
-    median_magnitude = np.median(magnitude)
-    median_phase = np.median(phases)
-    
-    median_position = eta_utils.get_cartesian(euler=(median_magnitude, median_phase), reference=e_target)
-    
-    def apply_euler_median(eye_data):
-        euler = eta_utils.get_euler_form(eye_data["gaze_point"], reference=median_position)
-        return pd.Series({'magnitude': euler[0], 'phase': euler[1]})
-    
-    left_euler_median = df.left_eye.apply(apply_euler_median)
-    right_euler_median = df.right_eye.apply(apply_euler_median)
-    
-    df["magnitude_left_from_median"] = left_euler_median['magnitude']
-    df["magnitude_right_from_median"] = right_euler_median['magnitude']
-    df["phase_left_from_median"] = left_euler_median['phase']
-    df["phase_right_from_median"] = right_euler_median['phase']
-    
+    left_eye_data = df.left_eye.apply(extract_distance_mean)
+    right_eye_data = df.right_eye.apply(extract_distance_mean)
+
+    df["distance_left_from_mean"] = left_eye_data['distance']
+    df["distance_right_from_mean"] = right_eye_data['distance']
     return df
 
-def get_statistics(gaze_file: str, screen_file: str) -> pd.DataFrame:
-    data = load_data(screen_file, gaze_file)
-    screen_width, screen_height = data.get("tracker")[0]
-    df_screen_data, df_tracker_data = data.get("gaze")[1], data.get("tracker")[1]
-    if df_screen_data.empty or df_tracker_data.empty:
+def get_statistics(gaze_file: str, validate_file: str) -> pd.DataFrame:
+    data = load_data(validate_file, gaze_file)
+    window = data.get("validate")[0]
+    screen = data.get("gaze")[0]
+    df_gaze_data, df_validate_data = data.get("gaze")[1], data.get("validate")[1]
+    if df_gaze_data.empty or df_validate_data.empty:
         return pd.DataFrame()
-    df_screen_data, df_tracker_data = preprocess_data(df_screen_data, df_tracker_data, screen_width, screen_height)
-    df_groups = filter_and_group_data(df_screen_data, df_tracker_data)
     
-    df_groups = df_groups.join(df_screen_data[["screen_position", "target_relative"]], on=["group"], how="left").dropna()
+    df_gaze_data, df_validate_data = preprocess_data(df_gaze_data, df_validate_data, window, screen)
+    df_groups = filter_and_group_data(df_gaze_data, df_validate_data)
     
-    df_calculated = df_groups.groupby("group").apply(calculate_euler)
+    df_groups = df_groups.join(df_validate_data[["screen_position", "target_relative"]], on=["group"], how="left").dropna()
+    
+    df_calculated = df_groups.groupby("group").apply(calculate_data)
     
     statistics = df_calculated.reset_index(drop=True).groupby("group").apply(
-        lambda row: calculate_statistics(row, screen_width, screen_height)
+        lambda row: calculate_statistics(row, screen, window)
     ).reset_index(drop=True)
     
     return statistics.round(3).astype(str)
 
 if __name__ == "__main__":
-    gaze_file = "/Users/binay/Desktop/code/EyeTrackerAnalyzer/data/gaze_data_20240919_210344.json"
-    screen_file = "/Users/binay/Desktop/code/EyeTrackerAnalyzer/data/system_Binay-MacBook-Pro.local_Darwin_arm64_1512x982.json"
+    gaze_file = "/Users/binay/Desktop/code/EyeTrackerAnalyzer/eta_data/gaze_data_20241018_130912.json"
+    validate_file = "/Users/binay/Desktop/code/EyeTrackerAnalyzer/eta_data/system_Binay-MacBook-Pro.local_Darwin_arm64_20241018_130910.json"
     
-    result = get_statistics(gaze_file, screen_file)
+    result = get_statistics(gaze_file=gaze_file, validate_file=validate_file)
     print(result)

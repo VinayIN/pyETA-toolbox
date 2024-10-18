@@ -9,29 +9,33 @@ import os
 import glob
 from pyETA import __datapath__
 
-def get_current_screen_size():
+def get_current_screen_size(dialog=False):
     app = qtw.QApplication.instance()
     if app is None:
         app = qtw.QApplication(sys.argv)
-    
-    screen_dialog = qtw.QDialog()
-    screen_dialog.setWindowTitle("Select Screen")
-    layout = qtw.QVBoxLayout(screen_dialog)
+    if dialog:
+        screen_dialog = qtw.QDialog()
+        screen_dialog.setWindowTitle("Select Screen")
+        layout = qtw.QVBoxLayout(screen_dialog)
 
-    screen_combo = qtw.QComboBox()
-    for i, screen in enumerate(app.screens()):
-        screen_combo.addItem(f"Screen {i+1}")
-    layout.addWidget(screen_combo)
+        screen_combo = qtw.QComboBox()
+        for i, screen in enumerate(app.screens()):
+            screen_combo.addItem(f"Screen {i+1}")
+        layout.addWidget(screen_combo)
 
-    button_box = qtw.QDialogButtonBox(qtw.QDialogButtonBox.StandardButton.Ok | 
-                                      qtw.QDialogButtonBox.StandardButton.Cancel)
-    button_box.accepted.connect(screen_dialog.accept)
-    button_box.rejected.connect(screen_dialog.reject)
-    layout.addWidget(button_box)
+        button_box = qtw.QDialogButtonBox(qtw.QDialogButtonBox.StandardButton.Ok | 
+                                        qtw.QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(screen_dialog.accept)
+        button_box.rejected.connect(screen_dialog.reject)
+        layout.addWidget(button_box)
 
-    if screen_dialog.exec() == qtw.QDialog.DialogCode.Accepted:
-        selected_screen = app.screens()[screen_combo.currentIndex()]
-        size = selected_screen.size()
+        if screen_dialog.exec() == qtw.QDialog.DialogCode.Accepted:
+            selected_screen = app.screens()[screen_combo.currentIndex()]
+            size = selected_screen.size()
+            return size.width(), size.height()
+    else:
+        screen = app.primaryScreen()
+        size = screen.size()
         return size.width(), size.height()
     return None, None
 
@@ -139,6 +143,9 @@ def get_relative_from_actual(actual, screen_width, screen_height):
     pixel_x = actual[0]/screen_width
     pixel_y = actual[1]/screen_height
     return pixel_x, pixel_y
+
+def get_distance(point1, point2):
+    return math.sqrt((point1[0]-point2[0])**2 + (point1[1]-point2[1])**2)
 
 def get_file_names(prefix, directory=None):
     '''

@@ -118,6 +118,7 @@ class Tracker:
 
     def _update_fixation_data(self, t, x, y, element):
         def calculate(previous_t, t, filtered_x, filtered_y):
+            LOGGER.debug(f"x: {x}, y: {y}, filtered_x: {filtered_x}, filtered_y: {filtered_y}")
             distance = np.sqrt((filtered_x - x)**2 + (filtered_y - y)**2)
             elapsed_time = t - previous_t
             velocity = distance / elapsed_time

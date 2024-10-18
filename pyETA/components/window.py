@@ -25,6 +25,7 @@ class ValidationWindow(qtw.QMainWindow):
     def initUI(self):
         self.setWindowTitle('Validation Window')
         self.setGeometry(100, 100, 600, 600)
+        self.showFullScreen()
         self.screen_width, self.screen_height = self.size().width(), self.size().height()
         self.gridWidget = qtw.QWidget(self)
         self.setCentralWidget(self.gridWidget)
