@@ -25,9 +25,9 @@ def calculate_statistics(df: pd.DataFrame, window: Tuple[int, int], screen: Tupl
     result = {
         "group": df.group.iloc[0],
         "target position": target,
-        "spread of target to gaze points": (df["distance_left_from_target"].std() + df["distance_right_from_target"].std())/2,
+        "spread (target to gaze points)": (df["distance_left_from_target"].std() + df["distance_right_from_target"].std())/2,
         "mean gaze point": mean_data,
-        "spread of mean to gaze points": (df["distance_left_from_mean"].std() + df["distance_right_from_mean"].std())/2,
+        "spread (mean to gaze points)": (df["distance_left_from_mean"].std() + df["distance_right_from_mean"].std())/2,
     }
     return pd.DataFrame(data = [result])
 
