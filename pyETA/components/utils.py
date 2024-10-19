@@ -107,7 +107,7 @@ class OneEuroFilter:
         LOGGER.debug(f"alpha: {alpha}, value: {current_value}, previous_value: {self.previous_value}, filtered: {filtered_value}")
 
         # Memorize the previous values.
-        self.previous_value = filtered_value if not np.isnan(filtered_value) else 0.0
+        self.previous_value = filtered_value
         self.previous_derivative = filtered_derivative
         self.previous_time = current_time
 
