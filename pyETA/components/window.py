@@ -24,7 +24,6 @@ class ValidationWindow(qtw.QMainWindow):
 
     def initUI(self):
         self.setWindowTitle('Validation Window')
-        self.setGeometry(100, 100, 600, 600)
         self.showFullScreen()
         self.screen_width, self.screen_height = self.size().width(), self.size().height()
         self.gridWidget = qtw.QWidget(self)
@@ -67,17 +66,18 @@ class ValidationWindow(qtw.QMainWindow):
         target_pos = target_widget.mapTo(self, qtc.QPoint(target_widget.width() // 2 - self.circle_size // 2,
                                                           target_widget.height() // 2 - self.circle_size // 2))
 
+        self.current_target_pos = target_pos
         self.animation.setStartValue(self.circle.pos())
         self.animation.setEndValue(target_pos)
         self.animation.setDuration(self.movement_duration)
         
         self.circle.show()
         self.animation.start()
-        self.collect_data()
 
         self.circle_positions.remove(self.current_position)
 
     def on_animation_finished(self):
+        self.collect_data()
         qtc.QTimer.singleShot(self.stay_duration, self.start_sequence)
 
     def keyPressEvent(self, event: qtg.QKeyEvent):
@@ -90,12 +90,17 @@ class ValidationWindow(qtw.QMainWindow):
             super().keyPressEvent(event)
     
     def collect_data(self):
-        circle_screen_pos = self.circle.mapToGlobal(qtc.QPoint(0, 0))
+        circle_center = qtc.QPoint(self.circle_size // 2, self.circle_size // 2)
+
+        window_pos = self.circle.mapTo(self, circle_center)
+        circle_screen_pos = self.mapToGlobal(window_pos)
+
         data_point = {
             "timestamp": eta_utils.get_timestamp(),
             "grid_position": self.current_position,
             "screen_position": (circle_screen_pos.x(), circle_screen_pos.y())
         }
+        LOGGER.debug(f"Grid: {data_point.get('grid_position')}, Target: {self.current_target_pos}, Screen: {data_point.get('screen_position')}")
         self.collected_data.append(data_point)
 
     def process_data(self):

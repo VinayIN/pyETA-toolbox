@@ -1,3 +1,4 @@
+import multiprocessing.process
 import sys
 import os
 import re
@@ -15,10 +16,11 @@ from pyETA import __version__, __datapath__, LOGGER
 from pyETA.components.window import run_validation_window
 from pyETA.components.track import Tracker
 from queue import Empty
+from contextlib import contextmanager
 import pyETA.components.utils as eta_utils
 import pyETA.components.validate as eta_validate
 import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 import plotly.express as px
 import plotly.graph_objs as go
 from collections import deque
@@ -33,6 +35,7 @@ class Variable:
     left_gaze_x = deque(maxlen=max_data_points)
     left_gaze_y = deque(maxlen=max_data_points)
     buffer_times, buffer_x, buffer_y = [], [], []
+    metrics_df = pd.DataFrame()
 
     def refresh_gaze(self):
         self.times.clear()
@@ -259,26 +262,27 @@ def start_lsl_stream(n_clicks, tracker_type, data_rate, fixation, velocity, extr
             'save_data': False
         }
 
-        process = multiprocessing.Process(
+        ctx = multiprocessing.get_context('spawn')
+        process = ctx.Process(
             target=run_tracker,
             args=(tracker_params,),
             daemon=True
         )
         
         process.start()
-        time.sleep(0.5)
+        time.sleep(1)
         if not process.is_alive():
             return None, dbc.Alert(
                 "Process failed to start.",
                 color="danger",
                 dismissable=True
             )
-  
+
         process_manager.add_process(process.pid, process)
         LOGGER.info(f"Started tracking process with PID {process.pid}")
         
         return process.pid, None
-        
+    
     except Exception as e:
         error_msg = f"Failed to start tracking process: {str(e)}"
         LOGGER.error(error_msg)
@@ -361,7 +365,7 @@ def stop_lsl_stream(n_clicks, pid):
             process.wait(timeout=3)
         except psutil.TimeoutExpired:
             LOGGER.warning(f"Process {pid} did not terminate within timeout, forcing kill")
-            cleanup_processes()
+            process_manager.cleanup()
             return f"Process {pid} did not terminate within timeout, forcing kill"
             
         process_manager.remove_process(pid)
@@ -551,6 +555,15 @@ def render_metrics_tab():
     )
 
 @app.callback(
+    Output('download-metrics-csv', 'data'),
+    Input('download-metrics-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def download_data(n_clicks):
+    if n_clicks > 0:
+        return dash.dcc.send_data_frame(var.metrics_df.to_csv, f"validation_metrics_{eta_utils.get_timestamp()}.csv")
+
+@app.callback(
     Output('live-graph-fixation', 'children'),
     [Input("stream-store", "data")],
 )
@@ -591,16 +604,18 @@ def update_dropdown(gaze_data, validation_data):
 )
 def update_graph_metrics(n_clicks, gaze_data, validation_data):
     if n_clicks and gaze_data and validation_data:
-        df_statistics = eta_validate.get_statistics(gaze_data, validation_data)
+        var.metrics_df = eta_validate.get_statistics(gaze_data, validation_data)
         content = dbc.Alert(
             "No data available for the selected files",
             color="danger", dismissable=True)
-        if not df_statistics.empty:
+        if not var.metrics_df.empty:
             content = [
                     dash.dash_table.DataTable(
-                        data = df_statistics.to_dict('records'),
+                        data = var.metrics_df.to_dict('records'),
                         id='metrics-table'
                     ),
+                    dbc.Button("Download", id="download-metrics-btn", color="success", outline=True, class_name="my-2"),
+                    dash.dcc.Download(id="download-metrics-csv")
                 ]
         return dbc.Card(
             dbc.CardBody(content, class_name="table-responsive"),
@@ -611,38 +626,14 @@ def update_graph_metrics(n_clicks, gaze_data, validation_data):
                 color="info", dismissable=True)
 
 
-def cleanup_processes():
-    LOGGER.info("Cleaning up initiated!")
-    for pid in process_manager.active_processes.keys():
-        try:
-            process = psutil.Process(pid)
-            LOGGER.info(f"Terminating process {pid}")
-            process.terminate()
-            try:
-                process.wait(timeout=1)
-            except psutil.TimeoutExpired:
-                LOGGER.warning(f"Process {pid} did not terminate within timeout, forcing kill")
-                process.kill()
-        except psutil.NoSuchProcess:
-            LOGGER.info(f"Process {pid} already terminated")
-        except Exception as e:
-            LOGGER.error(f"Error cleaning up process {pid}: {str(e)}")
-    process_manager.active_processes.clear()
-    LOGGER.info("Cleanup complete")
-
-def signal_handler(signum, frame):
-    LOGGER.info(f"Received signal {signum}")
-    cleanup_processes()
-    sys.exit(0)
-
 @click.command(name="application")
 @click.option('--debug', type=bool, is_flag=True, help="debug mode")
 @click.option('--port', type=int, default=8050, help="port number")
 def main(debug: bool, port: int):
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-    atexit.register(cleanup_processes)
-    app.run(debug=debug, port=port)
+    try:
+        app.run(debug=debug, port=port)
+    finally:
+        process_manager.cleanup()
 
 if __name__ == '__main__':
     main()

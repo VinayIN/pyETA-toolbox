@@ -5,23 +5,28 @@ import json
 from datetime import timedelta
 import pyETA.components.utils as eta_utils
 from pyETA import LOGGER
+from dataclasses import dataclass
 
-def convert_window_to_screen_coordinates(point: Tuple[float, float], window: Tuple[int, int], screen: Tuple[int, int]) -> Tuple[float, float]:
-    x = (point[0] / window[0]) * screen[0]
-    y = (point[1] / window[1]) * screen[1]
+@dataclass
+class ValidateData:
+    screen: Tuple[int, int]
+    window: Tuple[int, int]
+
+
+def convert_window_to_screen_coordinates(point: Tuple[float, float]) -> Tuple[float, float]:
+    x = (point[0] / ValidateData.window[0]) * ValidateData.screen[0]
+    y = (point[1] / ValidateData.window[1]) * ValidateData.screen[1]
     return (x, y)
 
-def convert_screen_to_window_coordinates(point: Tuple[float, float], window: Tuple[int, int], screen: Tuple[int, int]) -> Tuple[float, float]:
-    x = (point[0] / screen[0]) * window[0]
-    y = (point[1] / screen[1]) * window[1]
+def convert_screen_to_window_coordinates(point: Tuple[float, float]) -> Tuple[float, float]:
+    x = (point[0] / ValidateData.screen[0]) * ValidateData.window[0]
+    y = (point[1] / ValidateData.screen[1]) * ValidateData.window[1]
     return (x, y)
 
-def calculate_statistics(df: pd.DataFrame, window: Tuple[int, int], screen: Tuple[int, int]) -> pd.DataFrame:
-    target = eta_utils.get_actual_from_relative(df.target_relative.iloc[0], screen[0], screen[1])
-
+def calculate_statistics(df: pd.DataFrame) -> pd.DataFrame:
+    target = eta_utils.get_actual_from_relative(df.target_relative.iloc[0], ValidateData.screen[0], ValidateData.screen[1])
     mean_data = (df["left_eye_x"].mean() + df["right_eye_x"].mean())/2, (df["left_eye_y"].mean() + df["right_eye_y"].mean())/2
-    mean_data = eta_utils.get_actual_from_relative(mean_data, screen[0], screen[1])
-
+    mean_data = eta_utils.get_actual_from_relative(mean_data, ValidateData.screen[0], ValidateData.screen[1])
     result = {
         "group": df.group.iloc[0],
         "target position": target,
@@ -37,28 +42,28 @@ def load_data(validate_file: str, gaze_file: str) -> Tuple[pd.DataFrame, pd.Data
     with open(gaze_file, 'r') as f:
         gaze_data = json.load(f)
     
-    screen = gaze_data["screen_size"]
-    window = validate_data["screen_size"]
+    ValidateData.screen = gaze_data["screen_size"]
+    ValidateData.window = validate_data["screen_size"]
     df_gaze_data = pd.DataFrame(data=gaze_data["data"])
     
     df_validate_data = pd.DataFrame(data=validate_data["data"])
     df_validate_data.index.name = 'group'
     df_validate_data = df_validate_data.reset_index()
-    data = {"gaze": (screen, df_gaze_data), "validate": (window, df_validate_data)}
-    LOGGER.info(f"Screen resolution: {screen}")
-    LOGGER.info(f"Window resolution: {window}")
+    data = {"gaze": df_gaze_data, "validate": df_validate_data}
+    LOGGER.info(f"Screen resolution: {ValidateData.screen}")
+    LOGGER.info(f"Window resolution: {ValidateData.window}")
     return data
 
-def preprocess_data(df_gaze_data: pd.DataFrame, df_validate_data: pd.DataFrame, window: Tuple[int, int], screen: Tuple[int, int]) -> pd.DataFrame:
+def preprocess_data(df_gaze_data: pd.DataFrame, df_validate_data: pd.DataFrame) -> pd.DataFrame:
     df_gaze_data['timestamp_0'] = pd.to_datetime(df_gaze_data['timestamp'], unit='s')
     
     df_validate_data['timestamp_0'] = pd.to_datetime(df_validate_data['timestamp'], unit='s')
     df_validate_data['timestamp_2'] = df_validate_data['timestamp_0'] + timedelta(seconds=2)
 
     df_validate_data["screen_position_recalibrated"] = df_validate_data.screen_position.apply(
-        lambda x: convert_screen_to_window_coordinates(x, window=window, screen=screen))
+        lambda x: convert_window_to_screen_coordinates(x))
     df_validate_data["target_relative"] = df_validate_data.screen_position_recalibrated.apply(
-        lambda x: eta_utils.get_relative_from_actual(x, screen[0], screen[1])
+        lambda x: eta_utils.get_relative_from_actual(x, ValidateData.screen[0], ValidateData.screen[1])
     )
     
     return df_gaze_data, df_validate_data
@@ -110,24 +115,20 @@ def calculate_data(df: pd.DataFrame) -> pd.DataFrame:
 
 def get_statistics(gaze_file: str, validate_file: str) -> pd.DataFrame:
     data = load_data(validate_file, gaze_file)
-    window = data.get("validate")[0]
-    screen = data.get("gaze")[0]
-    df_gaze_data, df_validate_data = data.get("gaze")[1], data.get("validate")[1]
+    df_gaze_data, df_validate_data = data.get("gaze"), data.get("validate")
     if df_gaze_data.empty or df_validate_data.empty:
         return pd.DataFrame()
     
-    df_gaze_data, df_validate_data = preprocess_data(df_gaze_data, df_validate_data, window, screen)
+    df_gaze_data, df_validate_data = preprocess_data(df_gaze_data, df_validate_data)
     df_groups = filter_and_group_data(df_gaze_data, df_validate_data)
     
-    df_groups = df_groups.join(df_validate_data[["screen_position", "target_relative"]], on=["group"], how="left").dropna()
+    df_groups = df_groups.join(df_validate_data[["screen_position", "screen_position_recalibrated", "target_relative"]], on=["group"], how="left").dropna()
     
     df_calculated = df_groups.groupby("group").apply(calculate_data)
     
-    statistics = df_calculated.reset_index(drop=True).groupby("group").apply(
-        lambda row: calculate_statistics(row, screen, window)
-    ).reset_index(drop=True)
+    statistics = df_calculated.reset_index(drop=True).groupby("group").apply(calculate_statistics).reset_index(drop=True)
     
-    return statistics.round(3).astype(str)
+    return statistics.round(4).astype(str)
 
 if __name__ == "__main__":
     gaze_file = "/Users/binay/Desktop/code/EyeTrackerAnalyzer/eta_data/gaze_data_20241018_130912.json"
