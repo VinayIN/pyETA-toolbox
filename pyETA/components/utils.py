@@ -104,7 +104,7 @@ class OneEuroFilter:
         adaptive_cutoff = self.min_cutoff + self.beta * abs(filtered_derivative)
         alpha = self.smoothing_factor(time_elapsed, adaptive_cutoff)
         filtered_value = self.exp_smoothing(alpha, current_value, self.previous_value)
-        LOGGER.info(f"alpha: {alpha}, value: {current_value}, previous_value: {self.previous_value}, filtered: {filtered_value}")
+        LOGGER.debug(f"alpha: {alpha}, value: {current_value}, previous_value: {self.previous_value}, filtered: {filtered_value}")
 
         # Memorize the previous values.
         self.previous_value = filtered_value if not np.isnan(filtered_value) else 0.0
@@ -164,3 +164,32 @@ def get_file_names(prefix, directory=None):
     if os.path.exists(directory):
         return glob.glob(os.path.join(directory, f'{prefix}*'))
     return []
+
+class ProcessStatus:
+    """Class to maintain process status and error information"""
+    def __init__(self):
+        self.active_processes = {}
+    
+    def add_process(self, pid, process):
+        self.active_processes[pid] = {
+            'process': process,
+            'start_time': datetime.datetime.now(),
+            'status': 'starting',
+            'last_error': None,
+            'last_update': datetime.datetime.now()
+        }
+    
+    def remove_process(self, pid):
+        if pid in self.active_processes:
+            del self.active_processes[pid]
+    
+    def update_status(self, pid, status, error=None):
+        if pid in self.active_processes:
+            self.active_processes[pid].update({
+                'status': status,
+                'last_error': error,
+                'last_update': datetime.datetime.now()
+            })
+
+    def get_process_info(self, pid):
+        return self.active_processes.get(pid)

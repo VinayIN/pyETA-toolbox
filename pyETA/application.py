@@ -1,9 +1,12 @@
 import sys
 import os
 import re
+import time
+import psutil
 import asyncio
 import multiprocessing
 import signal
+import atexit
 import dash
 import datetime
 import numpy as np
@@ -11,6 +14,7 @@ import pandas as pd
 from pyETA import __version__, __datapath__, LOGGER
 from pyETA.components.window import run_validation_window
 from pyETA.components.track import Tracker
+from queue import Empty
 import pyETA.components.utils as eta_utils
 import pyETA.components.validate as eta_validate
 import dash_bootstrap_components as dbc
@@ -38,6 +42,7 @@ class Variable:
 
 
 var = Variable()
+process_manager = eta_utils.ProcessStatus()
 
 def run_async_function(async_func):
     loop = asyncio.new_event_loop()
@@ -95,13 +100,15 @@ app.layout = dbc.Container([
             dbc.Card(dbc.CardBody([
                 dbc.Row([
                     dash.html.Div(id='lsl-status'),
+                    dash.dcc.Interval(id='status-interval', interval=1000, n_intervals=0),
+                    dash.html.Div(id='process-error'),
                     dbc.Col([
                         dash.dcc.RadioItems(
                             options=[
                                 {"label": " Mock", "value": "mock"},
                                 {"label": " Eye-Tracker", "value": "eye-tracker"}
                             ],
-                            value='mock',
+                            value='eye-tracker',
                             id="tracker-type"
                         ),
                         dbc.Label("Data Rate (Hz)"),
@@ -121,10 +128,10 @@ app.layout = dbc.Container([
                         dash.dcc.Checklist(
                             options=[
                                 {"label": " Push to stream (tobii_gaze_fixation)", "value": "push_stream"},
-                                {"label": " Remove screen NaN (default: 0)", "value": "dont_screen_nans"},
+                                {"label": " Dont remove screen NaN (default: 0)", "value": "dont_screen_nans"},
                                 {"label": " Verbose", "value": "verbose"}
                             ],
-                            value=["push_stream", "dont_screen_nans"],
+                            value=["push_stream"],
                             id="tracker-extra-options",
                         )
                     ]),
@@ -143,7 +150,7 @@ app.layout = dbc.Container([
                             {"label": " Mock", "value": "mock"},
                             {"label": " Eye-Tracker", "value": "eye-tracker"}
                         ],
-                        value='mock',
+                        value='eye-tracker',
                         id="validation-tracker-type",
                     ),
                     dbc.Button(
@@ -207,14 +214,18 @@ def update_window(n_clicks, value):
     return 0
 
 def run_tracker(params):
-    duration = params.get("duration")
-    tracker = Tracker(**params)
-    if duration is not None:
-        LOGGER.info(f"Total Duration: {duration}")
-    tracker.start_tracking(duration=duration)
+    try:
+        duration = params.get("duration")
+        tracker = Tracker(**params)
+        if duration is not None:
+            LOGGER.info(f"Total Duration: {duration}")
+        tracker.start_tracking(duration=duration)
+    except Exception as e:
+        LOGGER.error(f"Tracker error: {str(e)}")
 
 @app.callback(
     Output("start_lsl_stream", "value"),
+    Output("process-error", "children"),
     [
         Input("start_lsl_stream", "n_clicks"),
         Input("tracker-type", "value"),
@@ -222,10 +233,21 @@ def run_tracker(params):
         Input("fixation-options", "value"),
         Input("fixation-velocity", "value"),
         Input("tracker-extra-options", "value"),
-    ]
+    ],
+    prevent_initial_call=True
 )
 def start_lsl_stream(n_clicks, tracker_type, data_rate, fixation, velocity, extra_options):
-    if n_clicks:
+    if not n_clicks:
+        return None, None
+        
+    try:
+        if process_manager.active_processes:
+            return None, dbc.Alert(
+                "Another tracking process is already running. Please stop it first.",
+                color="warning",
+                dismissable=True
+            )
+
         tracker_params = {
             'data_rate': data_rate or 600,
             'use_mock': tracker_type == "mock",
@@ -237,24 +259,90 @@ def start_lsl_stream(n_clicks, tracker_type, data_rate, fixation, velocity, extr
             'save_data': False
         }
 
-        process = multiprocessing.Process(target=run_tracker, args=(tracker_params,), daemon=True)
+        process = multiprocessing.Process(
+            target=run_tracker,
+            args=(tracker_params,),
+            daemon=True
+        )
+        
         process.start()
-        return process.pid
-    return None
+        time.sleep(0.5)
+        if not process.is_alive():
+            return None, dbc.Alert(
+                "Process failed to start.",
+                color="danger",
+                dismissable=True
+            )
+  
+        process_manager.add_process(process.pid, process)
+        LOGGER.info(f"Started tracking process with PID {process.pid}")
+        
+        return process.pid, None
+        
+    except Exception as e:
+        error_msg = f"Failed to start tracking process: {str(e)}"
+        LOGGER.error(error_msg)
+        return None, dbc.Alert(error_msg, color="danger", dismissable=True)
 
 @app.callback(
     Output("lsl-status", "children"),
     [
         Input("start_lsl_stream", "value"),
         Input("stop_lsl_stream", "value"),
+        Input("status-interval", "n_intervals")
     ]
 )
-def update_lsl_status(pid, stop_val):
-    if stop_val == 1:
-        return dbc.Alert("Stopped (Refresh the browser)", color="danger", dismissable=True)
-    if pid:
-        return dbc.Alert(f"Starting (PID: {pid})", color="success", dismissable=True)
-    return dbc.Alert("Not Running", color="warning", dismissable=True)
+def update_lsl_status(pid, stop_message, n_intervals):
+    if stop_message:
+        return dbc.Alert(f"{stop_message} (Refresh the page)", color="warning", dismissable=True)
+    if not pid:
+        return dbc.Alert("Not Running", color="warning", dismissable=True)
+    
+    try:        
+        # Get process info
+        process_info = process_manager.get_process_info(pid)
+        if not process_info:
+            return dbc.Alert("Process not found in manager", color="danger", dismissable=True)
+        
+        # Check process status using psutil
+        try:
+            process = psutil.Process(pid)
+            if not process.is_running():
+                return dbc.Alert("Process not running", color="danger", dismissable=True)
+            
+            if process.status() == psutil.STATUS_ZOMBIE:
+                return dbc.Alert("Process Zombie (Need restart)", color="danger", dismissable=True)
+            
+            # Get process metrics
+            memory_info = process.memory_info()
+            cpu_percent = process.cpu_percent()
+            runtime = datetime.datetime.now() - process_info['start_time']
+            
+            return dbc.Alert(
+                [
+                    dash.html.Div([
+                        dash.html.Strong("Status: "), "Running",
+                        dash.html.Br(),
+                        dash.html.Strong("PID: "), str(pid),
+                        dash.html.Br(),
+                        dash.html.Strong("Runtime: "), f"{runtime.seconds}s",
+                        dash.html.Br(),
+                        dash.html.Strong("Memory: "), f"{memory_info.rss / 1024 / 1024:.1f} MB",
+                        dash.html.Br(),
+                        dash.html.Strong("CPU: "), f"{cpu_percent:.1f}%"
+                    ])
+                ],
+                color="success",
+                dismissable=True
+            )
+            
+        except psutil.NoSuchProcess:
+            process_manager.remove_process(pid)
+            return dbc.Alert("Process terminated unexpectedly", color="danger", dismissable=True)
+            
+    except Exception as e:
+        LOGGER.error(f"Error monitoring process: {str(e)}")
+        return dbc.Alert(f"Monitoring error: {str(e)}", color="danger", dismissable=True)
 
 @app.callback(
     Output("stop_lsl_stream", "value"),
@@ -262,15 +350,32 @@ def update_lsl_status(pid, stop_val):
     allow_duplicate=True
 )
 def stop_lsl_stream(n_clicks, pid):
-    if n_clicks and pid:
+    if not (n_clicks and pid):
+        return 0
+        
+    try:
+        process = psutil.Process(pid)
+    
+        process.terminate()
         try:
-            os.kill(pid, signal.SIGINT)
-            LOGGER.info(f"Process with PID {pid} stopped.")
-            return 1
-        except ProcessLookupError:
-            LOGGER.info(f"Process with PID {pid} not found.")
-    return 0
-
+            process.wait(timeout=3)
+        except psutil.TimeoutExpired:
+            LOGGER.warning(f"Process {pid} did not terminate within timeout, forcing kill")
+            cleanup_processes()
+            return f"Process {pid} did not terminate within timeout, forcing kill"
+            
+        process_manager.remove_process(pid)
+        LOGGER.info(f"Process with PID {pid} stopped successfully")
+        return f"Stopped successfully PID: {pid}"
+        
+    except psutil.NoSuchProcess:
+        LOGGER.info(f"Process with PID {pid} not found")
+        process_manager.remove_process(pid)
+        return f"PID: {pid} not found"
+    except Exception as e:
+        error_msg = f"Error stopping process {pid}: {str(e)}"
+        LOGGER.error(error_msg)
+        return error_msg
 
 @app.callback(
     [Output("start_lsl_stream", "disabled"), Output("stop_lsl_stream", "disabled")],
@@ -505,10 +610,38 @@ def update_graph_metrics(n_clicks, gaze_data, validation_data):
                 "Choose appropriate files combination to analyze the eye tracker data",
                 color="info", dismissable=True)
 
+
+def cleanup_processes():
+    LOGGER.info("Cleaning up initiated!")
+    for pid in process_manager.active_processes.keys():
+        try:
+            process = psutil.Process(pid)
+            LOGGER.info(f"Terminating process {pid}")
+            process.terminate()
+            try:
+                process.wait(timeout=1)
+            except psutil.TimeoutExpired:
+                LOGGER.warning(f"Process {pid} did not terminate within timeout, forcing kill")
+                process.kill()
+        except psutil.NoSuchProcess:
+            LOGGER.info(f"Process {pid} already terminated")
+        except Exception as e:
+            LOGGER.error(f"Error cleaning up process {pid}: {str(e)}")
+    process_manager.active_processes.clear()
+    LOGGER.info("Cleanup complete")
+
+def signal_handler(signum, frame):
+    LOGGER.info(f"Received signal {signum}")
+    cleanup_processes()
+    sys.exit(0)
+
 @click.command(name="application")
 @click.option('--debug', type=bool, is_flag=True, help="debug mode")
 @click.option('--port', type=int, default=8050, help="port number")
 def main(debug: bool, port: int):
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    atexit.register(cleanup_processes)
     app.run(debug=debug, port=port)
 
 if __name__ == '__main__':
