@@ -30,8 +30,10 @@ def calculate_statistics(df: pd.DataFrame) -> pd.DataFrame:
     result = {
         "group": df.group.iloc[0],
         "target position": target,
+        "distance (target to gaze points)": (df["distance_left_from_target_px"].mean() + df["distance_right_from_target_px"].mean())/2,
         "spread (target to gaze points)": (df["distance_left_from_target"].std() + df["distance_right_from_target"].std())/2,
         "mean gaze point": mean_data,
+        "distance (mean to gaze points)": (df["distance_left_from_mean_px"].mean() + df["distance_right_from_mean_px"].mean())/2,
         "spread (mean to gaze points)": (df["distance_left_from_mean"].std() + df["distance_right_from_mean"].std())/2,
     }
     return pd.DataFrame(data = [result])
@@ -85,10 +87,13 @@ def filter_and_group_data(df_gaze_data: pd.DataFrame, df_validate_data: pd.DataF
 
 def calculate_data(df: pd.DataFrame) -> pd.DataFrame:
     target = df.target_relative.iloc[0]
+    target_pixel = df.screen_position_recalibrated.iloc[0]
     
     def extract_distance_target(eye_data):
+        point = eta_utils.get_actual_from_relative(eye_data["gaze_point"], ValidateData.screen[0], ValidateData.screen[1])
         distance = eta_utils.get_distance(eye_data["gaze_point"], target)
-        return pd.Series({'distance': distance, 'x': eye_data["gaze_point"][0], 'y': eye_data["gaze_point"][1]})
+        distance_pixel = eta_utils.get_distance(point, target_pixel)
+        return pd.Series({'distance': distance, 'distance_px': distance_pixel, 'x': eye_data["gaze_point"][0], 'y': eye_data["gaze_point"][1]})
     
     left_eye_data = df.left_eye.apply(extract_distance_target)
     right_eye_data = df.right_eye.apply(extract_distance_target)
@@ -97,20 +102,26 @@ def calculate_data(df: pd.DataFrame) -> pd.DataFrame:
     df["left_eye_y"] = left_eye_data['y']
     df["right_eye_x"] = right_eye_data['x']
     df["right_eye_y"] = right_eye_data['y']
-    mean_x = (left_eye_data['x'].mean() + right_eye_data['x'].mean()) / 2
-    mean_y = (left_eye_data['y'].mean() + right_eye_data['y'].mean()) / 2
+    mean_xy = (left_eye_data['x'].mean() + right_eye_data['x'].mean()) / 2, (left_eye_data['y'].mean() + right_eye_data['y'].mean()) / 2
     df["distance_left_from_target"] = left_eye_data['distance']
+    df["distance_left_from_target_px"] = left_eye_data['distance_px']
     df["distance_right_from_target"] = right_eye_data['distance']
+    df["distance_right_from_target_px"] = right_eye_data['distance_px']
 
-    def extract_distance_mean(eye_data):
-        distance = eta_utils.get_distance(eye_data["gaze_point"], (mean_x, mean_y))
-        return pd.Series({'distance': distance, 'x': eye_data["gaze_point"][0], 'y': eye_data["gaze_point"][1]})
+    def extract_distance_mean(eye_data, mean_xy):
+        point = eta_utils.get_actual_from_relative(eye_data["gaze_point"], ValidateData.screen[0], ValidateData.screen[1])
+        point_meanxy = eta_utils.get_actual_from_relative(mean_xy, ValidateData.screen[0], ValidateData.screen[1])
+        distance = eta_utils.get_distance(eye_data["gaze_point"], mean_xy)
+        distance_pixel = eta_utils.get_distance(point, point_meanxy)
+        return pd.Series({'distance': distance, 'distance_px': distance_pixel, 'x': eye_data["gaze_point"][0], 'y': eye_data["gaze_point"][1]})
     
-    left_eye_data = df.left_eye.apply(extract_distance_mean)
-    right_eye_data = df.right_eye.apply(extract_distance_mean)
+    left_eye_data = df.left_eye.apply(lambda x: extract_distance_mean(x, mean_xy))
+    right_eye_data = df.right_eye.apply(lambda x: extract_distance_mean(x, mean_xy))
 
     df["distance_left_from_mean"] = left_eye_data['distance']
+    df["distance_left_from_mean_px"] = left_eye_data['distance_px']
     df["distance_right_from_mean"] = right_eye_data['distance']
+    df["distance_right_from_mean_px"] = right_eye_data['distance_px']
     return df
 
 def get_statistics(gaze_file: str, validate_file: str) -> pd.DataFrame:
