@@ -612,7 +612,10 @@ def update_graph_metrics(n_clicks, gaze_data, validation_data):
             content = [
                     dash.dash_table.DataTable(
                         data = var.metrics_df.to_dict('records'),
-                        id='metrics-table'
+                        id='metrics-table',
+                        style_table={'width': '100%', 'overflowX': 'auto'},
+                        style_cell={'textAlign': 'center', 'minWidth': '120px', 'whiteSpace': 'normal'},
+                        style_header={'fontWeight': 'bold'},
                     ),
                     dbc.Button("Download", id="download-metrics-btn", color="success", outline=True, class_name="my-2"),
                     dash.dcc.Download(id="download-metrics-csv")
