@@ -46,9 +46,9 @@ def load_data(validate_file: str, gaze_file: str) -> Tuple[pd.DataFrame, pd.Data
     
     ValidateData.screen = gaze_data["screen_size"]
     ValidateData.window = validate_data["screen_size"]
-    df_gaze_data = pd.DataFrame(data=gaze_data["data"])
+    df_gaze_data = pd.DataFrame(data=gaze_data["data"]).fillna(0.0)
     
-    df_validate_data = pd.DataFrame(data=validate_data["data"])
+    df_validate_data = pd.DataFrame(data=validate_data["data"]).fillna(0.0)
     df_validate_data.index.name = 'group'
     df_validate_data = df_validate_data.reset_index()
     data = {"gaze": df_gaze_data, "validate": df_validate_data}
@@ -90,6 +90,8 @@ def calculate_data(df: pd.DataFrame) -> pd.DataFrame:
     target_pixel = df.screen_position_recalibrated.iloc[0]
     
     def extract_distance_target(eye_data):
+        if np.isnan(eye_data["gaze_point"][0]):
+            return pd.Series({'distance': np.nan, 'distance_px': np.nan, 'x': np.nan, 'y': np.nan})
         point = eta_utils.get_actual_from_relative(eye_data["gaze_point"], ValidateData.screen[0], ValidateData.screen[1])
         distance = eta_utils.get_distance(eye_data["gaze_point"], target)
         distance_pixel = eta_utils.get_distance(point, target_pixel)
@@ -109,6 +111,8 @@ def calculate_data(df: pd.DataFrame) -> pd.DataFrame:
     df["distance_right_from_target_px"] = right_eye_data['distance_px']
 
     def extract_distance_mean(eye_data, mean_xy):
+        if np.isnan(eye_data["gaze_point"][0]):
+            return pd.Series({'distance': np.nan, 'distance_px': np.nan, 'x': np.nan, 'y': np.nan})
         point = eta_utils.get_actual_from_relative(eye_data["gaze_point"], ValidateData.screen[0], ValidateData.screen[1])
         point_meanxy = eta_utils.get_actual_from_relative(mean_xy, ValidateData.screen[0], ValidateData.screen[1])
         distance = eta_utils.get_distance(eye_data["gaze_point"], mean_xy)
