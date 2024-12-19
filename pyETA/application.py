@@ -1,47 +1,58 @@
 import multiprocessing.process
-import sys
 import os
 import re
 import time
 import psutil
 import asyncio
 import multiprocessing
-import signal
 import atexit
 import dash
 import datetime
-import numpy as np
 import pandas as pd
 from pyETA import __version__, __datapath__, LOGGER
 from pyETA.components.window import run_validation_window
 from pyETA.components.track import Tracker
-from queue import Empty
-from contextlib import contextmanager
 import pyETA.components.utils as eta_utils
 import pyETA.components.validate as eta_validate
 import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output, State
-import plotly.express as px
+from dash.dependencies import Input, Output
 import plotly.graph_objs as go
-from collections import deque
 import pylsl
 import pathlib
 import click
+import pyETA.components.reader as eta_reader
+from threading import Thread
 
 class Variable:
     inlet = None
-    max_data_points = 1000 * 60 * 2
-    times = deque(maxlen=max_data_points)
-    left_gaze_x = deque(maxlen=max_data_points)
-    left_gaze_y = deque(maxlen=max_data_points)
-    buffer_times, buffer_x, buffer_y = [], [], []
     metrics_df = pd.DataFrame()
+    reader = eta_reader.GazeReader()
+    stream_thread = None
+    width, height = eta_utils.get_current_screen_size()
 
     def refresh_gaze(self):
-        self.times.clear()
-        self.left_gaze_x.clear()
-        self.left_gaze_y.clear()
-        self.buffer_times, self.buffer_x, self.buffer_y = [], [], []
+        if self.stream_thread and self.stream_thread.is_alive():
+            self.reader.stop()
+            self.stream_thread.join()
+            self.reader = eta_reader.GazeReader()
+            self.start_stream_thread()
+
+    def start_stream_thread(self):
+        if self.inlet and not (self.stream_thread and self.stream_thread.is_alive()):
+            self.reader.running = True
+            self.stream_thread = Thread(
+                target=self.reader.read_stream,
+                args=(self.inlet,),
+                daemon=True
+            )
+            self.stream_thread.start()
+            LOGGER.info("Started gaze data streaming thread")
+
+    def stop_stream_thread(self):
+        if self.stream_thread and self.stream_thread.is_alive():
+            self.reader.stop()
+            self.stream_thread.join()
+            LOGGER.info("Stopped gaze data streaming thread")
 
 
 var = Variable()
@@ -320,6 +331,7 @@ def update_lsl_status(pid, stop_message, n_intervals):
             # Get process metrics
             memory_info = process.memory_info()
             cpu_percent = process.cpu_percent()
+            storage_free = psutil.disk_usage(os.getcwd()).free / 1024**3
             runtime = datetime.datetime.now() - process_info['start_time']
             
             return dbc.Alert(
@@ -332,6 +344,8 @@ def update_lsl_status(pid, stop_message, n_intervals):
                         dash.html.Strong("Runtime: "), f"{runtime.seconds}s",
                         dash.html.Br(),
                         dash.html.Strong("Memory: "), f"{memory_info.rss / 1024 / 1024:.1f} MB",
+                        dash.html.Br(),
+                        dash.html.Strong("Storage avail: "), f"{storage_free} GB",
                         dash.html.Br(),
                         dash.html.Strong("CPU: "), f"{cpu_percent:.1f}%"
                     ])
@@ -382,13 +396,6 @@ def stop_lsl_stream(n_clicks, pid):
         return error_msg
 
 @app.callback(
-    [Output("start_lsl_stream", "disabled"), Output("stop_lsl_stream", "disabled")],
-    [Input("start_lsl_stream", "value")]
-)
-def update_button_states(pid):
-    return bool(pid), not bool(pid)
-
-@app.callback(
     Output("tab-content", "children"),
     [Input("tabs", "active_tab")],
 )
@@ -411,7 +418,7 @@ def render_tab(tab_type):
                 dash.html.H3(f"Live Visualization: {tab_type.capitalize()} points", className="mb-3"),
                 dash.html.Hr(),
                 dbc.Col(
-                    dbc.Button("Refresh", color="warning", outline=True, id=f"refresh-{tab_type}", class_name="bi bi-arrow-clockwise"),
+                    dbc.Button("Refresh", color="warning", outline=True, id="refresh", class_name="bi bi-arrow-clockwise"),
                     width="auto",
                     class_name="mb-3"
                 ),
@@ -422,14 +429,15 @@ def render_tab(tab_type):
     ))
 
 @app.callback(
-    Output('refresh-gaze', 'n_clicks'),
-    [Input('refresh-gaze', 'n_clicks')],
+    Output('refresh', 'n_clicks'),
+    [Input('refresh', 'n_clicks')],
     prevent_initial_call=True
 )
 def clear_data(n_clicks):
     if n_clicks:
-        LOGGER.info("Refresh button clicked gaze")
+        LOGGER.info("Refresh button clicked")
         var.refresh_gaze()
+        var.reader.clear_data()
     return n_clicks
 
 def get_available_stream():
@@ -458,6 +466,8 @@ def get_inlet(n_clicks):
         if var.inlet is None:
             var.inlet, message = get_available_stream()
             name = var.inlet.info().name() if var.inlet else None
+            if var.inlet:
+                var.start_stream_thread()
             LOGGER.info(message)
         else:
             name = var.inlet.info().name()
@@ -485,41 +495,76 @@ def update_stream_status(data):
     ],
 )
 def update_graph_gaze(n_intervals, data):
-    screen_height, screen_width = 1, 1
+    """
+    Updates the gaze graph with data retrieved from the GazeGraphUpdater.
+    """
     if data["inlet"] is not None:
-        while True:
-            sample, _ = var.inlet.pull_sample(timeout=0.0)
-            if sample is None:
-                break
-
-            current_time = datetime.datetime.fromtimestamp(sample[-2])
-            screen_width, screen_height = sample[-4], sample[-3]
-            gaze_x = int(sample[0] * screen_width)
-            gaze_y = int(sample[1] * screen_height)
-
-            var.buffer_times.append(current_time)
-            var.buffer_x.append(gaze_x)
-            var.buffer_y.append(gaze_y)
-        
-        var.times.extend(var.buffer_times)
-        var.left_gaze_x.extend(var.buffer_x)
-        var.left_gaze_y.extend(var.buffer_y)
-        var.buffer_times, var.buffer_x, var.buffer_y = [], [], []
+        times, x, y = var.reader.get_data()
 
         fig = go.Figure(skip_invalid=True)
-        fig.add_trace(go.Scatter(x=list(var.times), y=list(var.left_gaze_x), mode='lines', name='Gaze X'))
-        fig.add_trace(go.Scatter(x=list(var.times), y=list(var.left_gaze_y), mode='lines', name='Gaze Y'))
-        
-        if len(var.times) > 0:
+        if times:
+            fig.add_trace(go.Scatter(x=list(times), y=list(x), mode='lines', name='Gaze X'))
+            fig.add_trace(go.Scatter(x=list(times), y=list(y), mode='lines', name='Gaze Y'))
+
             fig.update_layout(
                 title='Eye Gaze Data Over Time',
-                xaxis=dict(title='Timestamp', range=[min(var.times), max(var.times)], type='date'),
-                yaxis=dict(title='Gaze Position', range=[0, max(screen_height, screen_width)]),
+                xaxis=dict(title='Timestamp', range=[min(times), max(times)], type='date'),
+                yaxis=dict(title='Gaze Position', range=[0, max(max(x, default=0), max(y, default=0))]),
                 showlegend=True
             )
         return dbc.Card(dbc.CardBody(dash.dcc.Graph(figure=fig)))
+
     return dbc.Alert("Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze_fixation stream`?",
                      color="danger", dismissable=True)
+
+@app.callback(
+    Output('live-graph-fixation', 'children'),
+    [
+        Input('graph-update-fixation', 'n_intervals'),
+        Input("stream-store", "data")
+    ],
+)
+def update_graph_fixation(n_intervals, data):
+    """
+    Updates the fixation graph with data retrieved from the GazeReader.
+    Shows fixation points with bubble sizes proportional to fixation duration.
+    """
+    if data["inlet"] is not None:
+        fixation_points = var.reader.get_data(fixation=True)
+        
+        fig = go.Figure(skip_invalid=True)
+        if fixation_points:
+            x_coords, y_coords, counts = zip(*fixation_points)
+            normalized_sizes = [count for count in counts]
+            
+            fig.add_trace(go.Scatter(
+                x=x_coords,
+                y=y_coords,
+                mode='markers',
+                marker=dict(
+                    size=normalized_sizes,
+                    sizemode='diameter',
+                    sizeref=2,
+                    color='rgba(255, 0, 0, 0.6)',
+                    line=dict(color='red', width=1)
+                ),
+                name='Gaze point'
+            ))
+
+            fig.update_layout(
+                title='Eye Fixation Tracker',
+                xaxis=dict(title='Screen Width', range=[0, var.width]),
+                yaxis=dict(title='Screen Height', range=[var.height, 0]),
+                showlegend=True,
+                plot_bgcolor='white'
+            )
+            
+            return dbc.Card(dbc.CardBody(dash.dcc.Graph(figure=fig)))
+
+    return dbc.Alert(
+        "Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze_fixation stream`?",
+        color="danger", dismissable=True
+    )
 
 def render_metrics_tab():
     gaze_files = eta_utils.get_file_names("gaze_data_")
@@ -562,17 +607,6 @@ def render_metrics_tab():
 def download_data(n_clicks):
     if n_clicks > 0:
         return dash.dcc.send_data_frame(var.metrics_df.to_csv, f"validation_metrics_{eta_utils.get_timestamp()}.csv")
-
-@app.callback(
-    Output('live-graph-fixation', 'children'),
-    [Input("stream-store", "data")],
-)
-def update_graph_fixation(data):
-    if data["inlet"] is not None:
-        pass
-    return dbc.Alert(
-        "Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze_fixation stream`?",
-        color="danger", dismissable=True)
 
 @app.callback(
     Output('dropdown-output', 'children'),
@@ -633,10 +667,16 @@ def update_graph_metrics(n_clicks, gaze_data, validation_data):
 @click.option('--debug', type=bool, is_flag=True, help="debug mode")
 @click.option('--port', type=int, default=8050, help="port number")
 def main(debug: bool, port: int):
+    def cleanup():
+        var.stop_stream_thread()
+        process_manager.cleanup()
+    
+    atexit.register(cleanup)
+    
     try:
         app.run(debug=debug, port=port)
     finally:
-        process_manager.cleanup()
+        cleanup()
 
 if __name__ == '__main__':
     main()

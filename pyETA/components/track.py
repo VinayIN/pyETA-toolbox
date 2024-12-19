@@ -97,6 +97,39 @@ class Tracker:
                 sfreq=self.data_rate,
                 dtype='float64',
                 source_id=self.eyetracker.serial_number)
+
+            ch_info = [
+                #left eye
+                ('left_gaze_x', 'gaze', 'normalized'),
+                ('left_gaze_y', 'gaze', 'normalized'),
+                ('left_pupil_diameter', 'pupil', 'mm'),
+                ('left_fixated', 'fixation', 'boolean'),
+                ('left_velocity', 'velocity', 'px'),
+                ('left_fixation_timestamp', 'timestamp', 's'),
+                ('left_fixation_elapsed', 'duration', 's'),
+                ('left_filtered_gaze_x', 'filtered_gaze', 'normalized'),
+                ('left_filtered_gaze_y', 'filtered_gaze', 'normalized'),
+                #right eye
+                ('right_gaze_x', 'gaze', 'normalized'),
+                ('right_gaze_y', 'gaze', 'normalized'),
+                ('right_pupil_diameter', 'pupil', 'mm'),
+                ('right_fixated', 'fixation', 'boolean'),
+                ('right_velocity', 'velocity', 'px'),
+                ('right_fixation_timestamp', 'timestamp', 's'),
+                ('right_fixation_elapsed', 'duration', 's'),
+                ('right_filtered_gaze_x', 'filtered_gaze', 'normalized'),
+                ('right_filtered_gaze_y', 'filtered_gaze', 'normalized'),
+                #screen data
+                ('screen_width', 'screen', 'px'),
+                ('screen_height', 'screen', 'px'),
+                ('timestamp', 'timestamp', 's'),
+                ('local_clock', 'timestamp', 's')
+            ]
+            
+            ch_names, ch_types, ch_units = zip(*ch_info)
+            debug.set_channel_names(ch_names)
+            debug.set_channel_types(ch_types)
+            debug.set_channel_units(ch_units)
             self.lsl_gaze_outlet = lsl.StreamOutlet(debug)
             LOGGER.info(f"LSL Stream Info: {self.lsl_gaze_outlet.get_sinfo()}")
         LOGGER.info(f"Member Variables: {vars(self)}")
