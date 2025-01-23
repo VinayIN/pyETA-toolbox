@@ -278,6 +278,8 @@ class Tracker:
     def start_tracking(self, duration: Optional[float]=None):
         """Starts tracking continuously and saves the data to a file, if save_data flag is set to True during initialization."""
         end_time = datetime.datetime.now() + datetime.timedelta(seconds=duration) if duration is not None else None
+        
+        LOGGER.debug(f"Tracking for {duration} seconds...") if duration else LOGGER.debug("Tracking continuously...")
         if self.eyetracker:
             try:
                 LOGGER.debug("Starting tracking...")
@@ -338,7 +340,6 @@ def main(push_stream, data_rate, use_mock, fixation, velocity, dont_screen_nans,
         save_data=save_data
     )
     if duration:
-        LOGGER.debug(f"Tracking for {duration} seconds...")
         tracker.start_tracking(duration=duration)
     else:
         tracker.start_tracking()

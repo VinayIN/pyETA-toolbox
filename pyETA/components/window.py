@@ -7,6 +7,7 @@ import datetime
 import json
 import os
 import click
+from typing import Union, Optional
 from pyETA import __datapath__, LOGGER
 import pyETA.components.utils as eta_utils
 
@@ -88,7 +89,8 @@ class ValidationWindow(qtw.QMainWindow):
         if event.key() == qtc.Qt.Key.Key_F11:
             self.showNormal() if self.isFullScreen() else self.showFullScreen()
             self.screen_width, self.screen_height = self.size().width(), self.size().height()
-        elif event.key() == qtc.Qt.Key.Key_Escape:
+        elif event.key() == qtc.Qt.Key.Key_Escape or event.key() == qtc.Qt.Key.Key_Q:
+            LOGGER.info("Validation Window closed manually!")
             self.close()
         else:
             super().keyPressEvent(event)
@@ -122,14 +124,26 @@ class ValidationWindow(qtw.QMainWindow):
                 }, f, indent=4)
             LOGGER.info(f"Validation Data saved: {file}!")
 
-def run_validation_window():
-    app = qtw.QApplication(sys.argv)
+def run_validation_window(screen: Optional[qtg.QScreen]=None):
+    # Get the existing QApplication instance
+    app = qtw.QApplication.instance()
+    if not app:
+        app = qtw.QApplication(sys.argv)  # Create a new instance if none exists
+
+    # Create the validation window
     validation_window = ValidationWindow()
-    sys.exit(app.exec())
+
+    if screen:
+        # Move the window to the specified screen's geometry
+        geometry = screen.geometry()
+        validation_window.setGeometry(geometry)  # Set the window geometry to match the screen
+        LOGGER.info(f"Validation Window created on screen resolution: {geometry.width()}x{geometry.height()}")
+
+    if __name__ == "__main__":
+        sys.exit(app.exec())
+
+    return validation_window
 
 @click.command(name="window")
 def main():
     run_validation_window()
-
-if __name__ == "__main__":
-    main()

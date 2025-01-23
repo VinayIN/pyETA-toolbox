@@ -1,5 +1,6 @@
 import sys
 import logging
+import click
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
@@ -7,24 +8,22 @@ import pyqtgraph as pg
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QLabel, QPushButton, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem,
-    QCheckBox, QSlider, QFrame, QSplitter
+    QCheckBox, QSlider, QFrame, QSplitter, QFrame, QDialog
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QIcon
-from pyETA import __version__
+from typing import Optional
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-LOGGER = logging.getLogger("EyeTrackerAnalyzer")
+from pyETA import __version__, LOGGER
+from pyETA.components.track import Tracker
 
 class StreamThread(QThread):
     update_gaze_signal = pyqtSignal(list, list, list)  # times, x, y
     update_fixation_signal = pyqtSignal(list, list, list)  # x_coords, y_coords, counts
 
-    def __init__(self, mock_data=False):
+    def __init__(self):
         super().__init__()
         self.running = False
-        self.mock_data = mock_data
 
     def run(self):
         self.running = True
@@ -43,13 +42,46 @@ class StreamThread(QThread):
 
     def stop(self):
         self.running = False
+        self.quit()
+        self.wait()
+
+class TrackerThread(QThread):
+    finished_signal = pyqtSignal(str)
+    error_signal = pyqtSignal(str)
+
+    def __init__(self, tracker_params):
+        super().__init__()
+        self.tracker_params = tracker_params
+        self.tracker = None
+        self.running = False
+
+    def run(self):
+        try:
+            self.running = True
+            LOGGER.info("Starting tracker thread...")
+            self.tracker = Tracker(**self.tracker_params)
+            self.tracker.start_tracking(duration=self.tracker_params['duration'])
+            if self.running:
+                self.finished_signal.emit("Tracking completed successfully")
+        except Exception as e:
+            error_msg = f"Tracker error: {str(e)}"
+            LOGGER.error(error_msg)
+            self.error_signal.emit(error_msg)
+        finally:
+            self.running = False
+
+    def stop(self):
+        self.running = False
+        if self.tracker:
+            self.tracker.stop_tracking()
+        self.quit()
+        self.wait()
 
 class EyeTrackerAnalyzer(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"pyETA-{__version__}")
         self.resize(1200, 800)
-        self.setWindowIcon(QIcon("eye_icon.png"))
 
         # Central widget and main layout
         central_widget = QWidget()
@@ -85,14 +117,21 @@ class EyeTrackerAnalyzer(QMainWindow):
         layout = QVBoxLayout(central_widget)
         layout.addWidget(splitter)
 
-        # Stream Thread
-        self.stream_thread = StreamThread()
-        self.stream_thread.update_gaze_signal.connect(self.update_gaze_plot)
-        self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
+        # Threads
+        self.stream_thread = None
+        self.tracker_thread = None
+
+        self.setStyleSheet("""
+            QPushButton:hover {
+                border: 1px solid;
+                border-color: black;
+                border-radius: 5px;
+                background-color: #2ECC71; 
+            }
+        """)    
 
     def create_sidebar(self):
         frame = QFrame()
-
         layout = QVBoxLayout(frame)
 
         title = QLabel("<h1>Toolbox - Eye Tracker Analyzer</h1>")
@@ -106,8 +145,15 @@ class EyeTrackerAnalyzer(QMainWindow):
                 Brandenburg University of Technology (Cottbus-Senftenberg)
             </a>"""
         )
-        faculty_info.setStyleSheet("margin-bottom: 15px;")
+        faculty_info.setStyleSheet("margin-bottom: 20px;")
         layout.addWidget(faculty_info)
+
+        source_code_link = QLabel(
+            """<h3 style='color: #555;'>Source code</h3>
+            <a href='https://github.com/VinayIN/EyeTrackerAnalyzer.git' style='text-decoration: none;' target='_blank'>
+                https://github.com/VinayIN/EyeTrackerAnalyzer.git
+            </a>"""
+        )
 
         markdown_text = QLabel(
             f"""<p>pyETA, Version: <code>{__version__}</code></p>
@@ -120,6 +166,7 @@ class EyeTrackerAnalyzer(QMainWindow):
             </ul>"""
         )
         layout.addWidget(markdown_text)
+        layout.addWidget(source_code_link)
         self.system_info_card = self.create_system_info_card()
         layout.addWidget(self.system_info_card)
         return frame
@@ -203,6 +250,7 @@ class EyeTrackerAnalyzer(QMainWindow):
         start_stop_layout.addWidget(self.stop_stream_btn)
         control_layout.addLayout(start_stop_layout)
         self.validate_btn = QPushButton("Validate Eye Tracker")
+        self.validate_btn.clicked.connect(self.validate_eye_tracker)
         control_layout.addWidget(self.validate_btn)
         layout.addLayout(control_layout)
 
@@ -220,6 +268,63 @@ class EyeTrackerAnalyzer(QMainWindow):
         self.tab_widget.addTab(self.gaze_tab, "Gaze Data")
         self.tab_widget.addTab(self.fixation_tab, "Fixation")
         self.tab_widget.addTab(self.metrics_tab, "Metrics")
+
+    def validate_eye_tracker(self):
+        # Screen Selection Dialog
+        screen_dialog = QDialog()
+        screen_dialog.setWindowTitle("Select Validation Screen")
+        layout = QVBoxLayout(screen_dialog)
+
+        # Get available screens
+        screens = QApplication.screens()
+        screen_combo = QComboBox()
+        for i, screen in enumerate(screens):
+            screen_combo.addItem(f"Screen {i+1}: {screen.geometry().width()}x{screen.geometry().height()}")
+
+        layout.addWidget(QLabel("Choose Validation Screen:"))
+        layout.addWidget(screen_combo)
+
+        validation_result_label = QLabel("Validation Status: Not Started")
+        layout.addWidget(validation_result_label)
+
+        if hasattr(self, 'tracker_thread') and self.tracker_thread and self.tracker_thread.isRunning():
+            QMessageBox.warning(self, "Warning", "Validation Tracker is already running. Please stop the stream")
+            return
+        def start_validation():
+            selected_screen = screens[screen_combo.currentIndex()]
+            tracker_params = {
+                'use_mock': self.stream_type_combo.currentText() == "Mock",
+                'fixation': self.fixation_check.isChecked(),
+                'verbose': self.verbose_check.isChecked(),
+                'push_stream': self.push_stream_check.isChecked(),
+                'save_data': True,
+                'duration': (9*(2000+1000))/1000 + (2000*3)/1000 + 2000/1000
+            }
+
+            try:
+                from pyETA.components.window import run_validation_window
+
+                self.validation_window = run_validation_window(screen=selected_screen)
+                self.tracker_thread = TrackerThread(tracker_params)
+                self.tracker_thread.finished_signal.connect(
+                    lambda msg: validation_result_label.setText(f"Validation Status: {msg}")
+                )
+                self.tracker_thread.error_signal.connect(
+                    lambda msg: validation_result_label.setText(f"Validation Status: {msg}")
+                )
+                self.tracker_thread.start()
+                self.validation_window.show()
+
+                validation_result_label.setText("Validation in Progress...")
+
+            except Exception as e:
+                validation_result_label.setText(f"Validation Status: Error - {str(e)}")
+                LOGGER.error(f"Validation error: {str(e)}")
+
+        validate_btn = QPushButton("Start Validation")
+        validate_btn.clicked.connect(start_validation)
+        layout.addWidget(validate_btn)
+        screen_dialog.exec()
 
     def create_gaze_data_tab(self):
         tab = QWidget()
@@ -260,25 +365,38 @@ class EyeTrackerAnalyzer(QMainWindow):
         return tab
 
     def start_stream(self):
-        if self.stream_thread.isRunning():
+        if hasattr(self, 'stream_thread') and self.stream_thread and self.stream_thread.isRunning():
             QMessageBox.warning(self, "Warning", "Stream is already running.")
             return
 
         mock_data = self.stream_type_combo.currentText() == "Mock"
-        self.stream_thread = StreamThread(mock_data)
-        self.stream_thread.update_gaze_signal.connect(self.update_gaze_plot)
-        self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
-        self.stream_thread.start()
-        self.statusBar().showMessage("Stream started")
+        try:
+            self.stream_thread = StreamThread(mock_data)
+            self.stream_thread.update_gaze_signal.connect(self.update_gaze_plot)
+            self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
+            self.stream_thread.start()
+            self.statusBar().showMessage("Stream started successfully", 3000)
+        except Exception as e:
+            error_msg = f"Failed to start stream: {str(e)}"
+            self.statusBar().showMessage(error_msg, 5000)
+            LOGGER.error(error_msg)
 
     def stop_stream(self):
-        if not self.stream_thread.isRunning():
+        if self.stream_thread is None:
+            QMessageBox.warning(self, "Warning", "No active stream to stop. Please start a stream first.")
+            return
+        if self.stream_thread and not self.stream_thread.isRunning():
             QMessageBox.warning(self, "Warning", "No active stream to stop.")
             return
 
-        self.stream_thread.stop()
-        self.stream_thread.wait()
-        self.statusBar().showMessage("Stream stopped")
+        try:
+            self.stream_thread.stop()
+            self.stream_thread.wait()
+            self.statusBar().showMessage("Stream stopped successfully", 3000)
+        except Exception as e:
+            error_msg = f"Error stopping stream: {str(e)}"
+            self.statusBar().showMessage(error_msg, 5000)
+            LOGGER.error(error_msg)
 
     def update_gaze_plot(self, times, x, y):
         self.curve_x.setData(times, x)
@@ -295,6 +413,7 @@ class EyeTrackerAnalyzer(QMainWindow):
         msg_box.setText(message)
         msg_box.exec()
 
+@click.command(name="application_runner")
 def main():
     app = QApplication(sys.argv)
     window = EyeTrackerAnalyzer()
