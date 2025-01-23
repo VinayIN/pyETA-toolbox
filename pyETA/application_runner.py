@@ -8,7 +8,7 @@ import pyqtgraph as pg
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QLabel, QPushButton, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem,
-    QCheckBox, QSlider, QFrame, QSplitter, QFrame, QDialog
+    QCheckBox, QSlider, QFrame, QSplitter, QFrame, QDialog, QDoubleSpinBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QIcon
@@ -99,9 +99,12 @@ class EyeTrackerAnalyzer(QMainWindow):
         main_layout = QVBoxLayout(main_content_widget)
 
         # Stream Configuration and System Info
-        config_info_layout = QHBoxLayout()
+        config_info_layout = QVBoxLayout()
         stream_config_layout = self.create_stream_configuration()
         config_info_layout.addLayout(stream_config_layout)
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        config_info_layout.addWidget(line)
         main_layout.addLayout(config_info_layout)
 
         # Tabs
@@ -201,7 +204,10 @@ class EyeTrackerAnalyzer(QMainWindow):
         self.system_info_labels["cpu"].setText(f"<strong>CPU:</strong> {cpu:.1f}%")
 
     def create_stream_configuration(self):
-        layout = QVBoxLayout()
+        # Main Horizontal Layout
+        main_layout = QHBoxLayout()
+
+        layout_first = QVBoxLayout()
 
         # Stream Type
         stream_type_layout = QHBoxLayout()
@@ -210,7 +216,7 @@ class EyeTrackerAnalyzer(QMainWindow):
         self.stream_type_combo.addItems(["Eye-Tracker", "Mock"])
         stream_type_layout.addWidget(stream_type_label)
         stream_type_layout.addWidget(self.stream_type_combo)
-        layout.addLayout(stream_type_layout)
+        layout_first.addLayout(stream_type_layout)
 
         # Data Rate
         data_rate_layout = QHBoxLayout()
@@ -220,26 +226,52 @@ class EyeTrackerAnalyzer(QMainWindow):
         self.data_rate_slider.setMaximum(800)
         self.data_rate_slider.setValue(600)
         self.data_rate_label = QLabel("600 Hz")
-        self.data_rate_slider.valueChanged.connect(self.update_data_rate_label)
-
+        self.data_rate_slider.valueChanged.connect(lambda value: self.data_rate_label.setText(f"{value} Hz"))
         data_rate_layout.addWidget(data_rate_label)
         data_rate_layout.addWidget(self.data_rate_slider)
         data_rate_layout.addWidget(self.data_rate_label)
-        
-        layout.addLayout(data_rate_layout)
+        layout_first.addLayout(data_rate_layout)
 
-        # Additional Options
-        options_layout = QVBoxLayout()
+        # Velocity Threshold
+        velocity_threshold_layout = QHBoxLayout()
+        velocity_threshold_label = QLabel("Velocity Threshold:")
+        self.velocity_threshold_spinbox = QDoubleSpinBox()
+        self.velocity_threshold_spinbox.setRange(0.0, 5.0)
+        self.velocity_threshold_spinbox.setValue(1.5)
+        self.velocity_threshold_spinbox.setSingleStep(0.1)
+        self.velocity_threshold_spinbox.valueChanged.connect(lambda value: self.velocity_threshold_label.setText(f"{value:.1f}"))
+        self.velocity_threshold_label = QLabel("1.5")
+        velocity_threshold_layout.addWidget(velocity_threshold_label)
+        velocity_threshold_layout.addWidget(self.velocity_threshold_spinbox)
+        velocity_threshold_layout.addWidget(self.velocity_threshold_label)
+        layout_first.addLayout(velocity_threshold_layout)
+
+        main_layout.addLayout(layout_first)
+
+        layout_second = QVBoxLayout()
+
+        # Fixation Checkbox
         self.fixation_check = QCheckBox("Enable Fixation")
+        self.fixation_check.setChecked(True)
+        layout_second.addWidget(self.fixation_check)
+
+        # Push to Stream Checkbox
         self.push_stream_check = QCheckBox("Push to Stream")
+        self.push_stream_check.setChecked(True)
+        layout_second.addWidget(self.push_stream_check)
+
+        # Verbose Checkbox
         self.verbose_check = QCheckBox("Verbose Mode")
+        layout_second.addWidget(self.verbose_check)
 
-        options_layout.addWidget(self.fixation_check)
-        options_layout.addWidget(self.push_stream_check)
-        options_layout.addWidget(self.verbose_check)
-        layout.addLayout(options_layout)
+        # Don't Screen NaNs Checkbox
+        self.dont_screen_nans_check = QCheckBox("Don't Screen NaNs (Default: 0)")
+        layout_second.addWidget(self.dont_screen_nans_check)
 
-        # Stream Control Buttons
+        # Add Right Layout to Main Layout
+        main_layout.addLayout(layout_second)
+
+        # Stream Control Buttons (Below Both VBoxes)
         control_layout = QVBoxLayout()
         start_stop_layout = QHBoxLayout()
         self.start_stream_btn = QPushButton("Start Stream")
@@ -249,15 +281,15 @@ class EyeTrackerAnalyzer(QMainWindow):
         start_stop_layout.addWidget(self.start_stream_btn)
         start_stop_layout.addWidget(self.stop_stream_btn)
         control_layout.addLayout(start_stop_layout)
+
         self.validate_btn = QPushButton("Validate Eye Tracker")
         self.validate_btn.clicked.connect(self.validate_eye_tracker)
         control_layout.addWidget(self.validate_btn)
-        layout.addLayout(control_layout)
 
-        return layout
+        # Add Control Layout to Main Layout
+        main_layout.addLayout(control_layout)
 
-    def update_data_rate_label(self, value):
-        self.data_rate_label.setText(f"{value} Hz")
+        return main_layout
 
     def setup_tabs(self):
         # Tabs: Gaze Data, Fixation, Metrics
@@ -368,10 +400,18 @@ class EyeTrackerAnalyzer(QMainWindow):
         if hasattr(self, 'stream_thread') and self.stream_thread and self.stream_thread.isRunning():
             QMessageBox.warning(self, "Warning", "Stream is already running.")
             return
-
-        mock_data = self.stream_type_combo.currentText() == "Mock"
+        tracker_params = {
+            'data_rate': self.data_rate_slider.value(),
+            'use_mock': self.stream_type_combo.currentText() == "Mock",
+            'fixation': self.fixation_check.isChecked(),
+            'velocity_threshold': 30,
+            'dont_screen_nans': True,
+            'verbose': self.verbose_check.isChecked(),
+            'push_stream': self.push_stream_check.isChecked(),
+            'save_data': False,
+            }
         try:
-            self.stream_thread = StreamThread(mock_data)
+            self.stream_thread = StreamThread()
             self.stream_thread.update_gaze_signal.connect(self.update_gaze_plot)
             self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
             self.stream_thread.start()
