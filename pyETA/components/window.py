@@ -17,7 +17,7 @@ class ValidationWindow(qtw.QMainWindow):
         self.circle_positions = [(row, col) for row in range(self.total_grids[0]) for col in range(self.total_grids[1])]
         self.current_position = None
         self.movement_duration = 1000
-        self.stay_duration = 2000
+        self.stay_duration = 3000
         self.circle_size = 20
         self.collected_data = []
         self.initUI()
@@ -25,7 +25,11 @@ class ValidationWindow(qtw.QMainWindow):
     def initUI(self):
         self.setWindowTitle('Validation Window')
         self.showFullScreen()
+        #self.screen_width = 1920
+        #self.screen_height = 1080
         self.screen_width, self.screen_height = self.size().width(), self.size().height()
+        print("Screen width:", self.screen_width)
+        print("Screen height:", self.screen_height)
         self.gridWidget = qtw.QWidget(self)
         self.setCentralWidget(self.gridWidget)
 
@@ -94,11 +98,13 @@ class ValidationWindow(qtw.QMainWindow):
 
         window_pos = self.circle.mapTo(self, circle_center)
         circle_screen_pos = self.mapToGlobal(window_pos)
-
+        x = circle_screen_pos.x()
+        #if x >= 1920:
+        #    x -= 1920
         data_point = {
             "timestamp": eta_utils.get_timestamp(),
             "grid_position": self.current_position,
-            "screen_position": (circle_screen_pos.x(), circle_screen_pos.y())
+            "screen_position": (x, circle_screen_pos.y())
         }
         LOGGER.debug(f"Grid: {data_point.get('grid_position')}, Target: {self.current_target_pos}, Screen: {data_point.get('screen_position')}")
         self.collected_data.append(data_point)
