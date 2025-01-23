@@ -106,7 +106,7 @@ class ValidationWindow(qtw.QMainWindow):
             "grid_position": self.current_position,
             "screen_position": (x, circle_screen_pos.y())
         }
-        LOGGER.debug(f"Grid: {data_point.get('grid_position')}, Target: {self.current_target_pos}, Screen: {data_point.get('screen_position')}")
+        LOGGER.debug(f"Grid: {data_point.get('grid_position')}, Target: {self.current_target_pos}, Screen   : {data_point.get('screen_position')}")
         self.collected_data.append(data_point)
 
     def process_data(self):
