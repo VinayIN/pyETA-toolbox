@@ -9,8 +9,44 @@ import os
 import click
 from typing import Union, Optional
 from pyETA import __datapath__, LOGGER
+from pyETA.components.track import Tracker
 import pyETA.components.utils as eta_utils
 
+
+# TrackerThread class
+class TrackerThread(qtc.QThread):
+    finished_signal = qtc.pyqtSignal(str)
+    error_signal = qtc.pyqtSignal(str)
+
+    def __init__(self, tracker_params):
+        super().__init__()
+        self.tracker_params = tracker_params
+        self.tracker = None
+        self.running = False
+
+    def run(self):
+        try:
+            self.running = True
+            LOGGER.info("Starting tracker thread...")
+            self.tracker = Tracker(**self.tracker_params)
+            self.tracker.start_tracking(duration=self.tracker_params['duration'])
+            if self.running:
+                self.finished_signal.emit("Tracking completed successfully")
+        except Exception as e:
+            error_msg = f"Tracker error: {str(e)}"
+            LOGGER.error(error_msg)
+            self.error_signal.emit(error_msg)
+        finally:
+            self.running = False
+
+    def stop(self):
+        self.running = False
+        if self.tracker:
+            self.tracker.stop_tracking()
+        self.quit()
+        self.wait()
+
+# ValidationWindow class (unchanged)
 class ValidationWindow(qtw.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -26,8 +62,6 @@ class ValidationWindow(qtw.QMainWindow):
     def initUI(self):
         self.setWindowTitle('Validation Window')
         self.showFullScreen()
-        #self.screen_width = 1920
-        #self.screen_height = 1080
         self.screen_width, self.screen_height = self.size().width(), self.size().height()
         print("Screen width:", self.screen_width)
         print("Screen height:", self.screen_height)
@@ -101,8 +135,6 @@ class ValidationWindow(qtw.QMainWindow):
         window_pos = self.circle.mapTo(self, circle_center)
         circle_screen_pos = self.mapToGlobal(window_pos)
         x = circle_screen_pos.x()
-        #if x >= 1920:
-        #    x -= 1920
         data_point = {
             "timestamp": eta_utils.get_timestamp(),
             "grid_position": self.current_position,
@@ -125,25 +157,37 @@ class ValidationWindow(qtw.QMainWindow):
             LOGGER.info(f"Validation Data saved: {file}!")
 
 def run_validation_window(screen: Optional[qtg.QScreen]=None):
-    # Get the existing QApplication instance
-    app = qtw.QApplication.instance()
-    if not app:
-        app = qtw.QApplication(sys.argv)  # Create a new instance if none exists
-
-    # Create the validation window
     validation_window = ValidationWindow()
 
     if screen:
-        # Move the window to the specified screen's geometry
         geometry = screen.geometry()
-        validation_window.setGeometry(geometry)  # Set the window geometry to match the screen
+        validation_window.setGeometry(geometry)
         LOGGER.info(f"Validation Window created on screen resolution: {geometry.width()}x{geometry.height()}")
-
-    if __name__ == "__main__":
-        sys.exit(app.exec())
 
     return validation_window
 
 @click.command(name="window")
-def main():
-    run_validation_window()
+@click.option("--use_mock", is_flag=True, help="Use mockup tracker")
+@click.option("--verbose", is_flag=True, help="Enable verbose logging")
+def main(use_mock, verbose):
+    app = qtw.QApplication(sys.argv)
+    validation_window = run_validation_window()
+    tracker_params = {
+        'use_mock': use_mock,
+        'fixation': False,
+        'verbose': verbose,
+        'push_stream': False,
+        'save_data': True,
+        'duration': (9*(2000+1000))/1000 + (2000*3)/1000 + 2000/1000
+    }
+
+    # Start the tracker thread
+    tracker_thread = TrackerThread(tracker_params)
+    tracker_thread.finished_signal.connect(lambda msg: LOGGER.info(msg))
+    tracker_thread.error_signal.connect(lambda msg: LOGGER.error(msg))
+    tracker_thread.start()
+    validation_window.show()
+    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()

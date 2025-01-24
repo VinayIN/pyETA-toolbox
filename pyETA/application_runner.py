@@ -16,6 +16,7 @@ from typing import Optional
 
 from pyETA import __version__, LOGGER
 from pyETA.components.track import Tracker
+from pyETA.components.window import TrackerThread
 
 class StreamThread(QThread):
     update_gaze_signal = pyqtSignal(list, list, list)  # times, x, y
@@ -44,39 +45,6 @@ class StreamThread(QThread):
         self.running = False
         self.quit()
         self.wait()
-
-class TrackerThread(QThread):
-    finished_signal = pyqtSignal(str)
-    error_signal = pyqtSignal(str)
-
-    def __init__(self, tracker_params):
-        super().__init__()
-        self.tracker_params = tracker_params
-        self.tracker = None
-        self.running = False
-
-    def run(self):
-        try:
-            self.running = True
-            LOGGER.info("Starting tracker thread...")
-            self.tracker = Tracker(**self.tracker_params)
-            self.tracker.start_tracking(duration=self.tracker_params['duration'])
-            if self.running:
-                self.finished_signal.emit("Tracking completed successfully")
-        except Exception as e:
-            error_msg = f"Tracker error: {str(e)}"
-            LOGGER.error(error_msg)
-            self.error_signal.emit(error_msg)
-        finally:
-            self.running = False
-
-    def stop(self):
-        self.running = False
-        if self.tracker:
-            self.tracker.stop_tracking()
-        self.quit()
-        self.wait()
-
 class EyeTrackerAnalyzer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -326,9 +294,9 @@ class EyeTrackerAnalyzer(QMainWindow):
             selected_screen = screens[screen_combo.currentIndex()]
             tracker_params = {
                 'use_mock': self.stream_type_combo.currentText() == "Mock",
-                'fixation': self.fixation_check.isChecked(),
+                'fixation': False,
                 'verbose': self.verbose_check.isChecked(),
-                'push_stream': self.push_stream_check.isChecked(),
+                'push_stream': False,
                 'save_data': True,
                 'duration': (9*(2000+1000))/1000 + (2000*3)/1000 + 2000/1000
             }

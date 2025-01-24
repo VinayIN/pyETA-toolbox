@@ -1,11 +1,15 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import json
-from datetime import timedelta
+import os
+import click
+import re
+import datetime
 import pyETA.components.utils as eta_utils
-from pyETA import LOGGER
+from pyETA import LOGGER, __datapath__
 from dataclasses import dataclass
+from tabulate import tabulate
 
 @dataclass
 class ValidateData:
@@ -60,7 +64,7 @@ def preprocess_data(df_gaze_data: pd.DataFrame, df_validate_data: pd.DataFrame) 
     df_gaze_data['timestamp_0'] = pd.to_datetime(df_gaze_data['timestamp'], unit='s')
     
     df_validate_data['timestamp_0'] = pd.to_datetime(df_validate_data['timestamp'], unit='s')
-    df_validate_data['timestamp_2'] = df_validate_data['timestamp_0'] + timedelta(seconds=2)
+    df_validate_data['timestamp_2'] = df_validate_data['timestamp_0'] + datetime.timedelta(seconds=2)
 
     df_validate_data["screen_position_recalibrated"] = df_validate_data.screen_position.apply(
         lambda x: convert_window_to_screen_coordinates(x))
@@ -145,9 +149,39 @@ def get_statistics(gaze_file: str, validate_file: str) -> pd.DataFrame:
     
     return statistics.round(4).astype(str)
 
-if __name__ == "__main__":
-    gaze_file = "/Users/binay/Desktop/code/EyeTrackerAnalyzer/eta_data/gaze_data_20241018_130912.json"
-    validate_file = "/Users/binay/Desktop/code/EyeTrackerAnalyzer/eta_data/system_Binay-MacBook-Pro.local_Darwin_arm64_20241018_130910.json"
-    
+def list_files_with_prefix(directory: str, prefix: str) -> List[str]:
+    return sorted([f for f in os.listdir(directory) if f.startswith(prefix)])
+
+@click.command("validate")
+@click.option('--csv', help="Name of the output CSV file.")
+def main(csv: Optional[str]):
+    # List files in __datapath__
+    gaze_files = list_files_with_prefix(__datapath__, "gaze_data_")
+    validate_files = list_files_with_prefix(__datapath__, "system_")
+
+    # Display gaze files
+    print("Available Gaze Data:")
+    for i, file in enumerate(gaze_files):
+        timestamp_data = re.search(r"gaze_data_(.*).json", file).group(1)
+        print(f'{i + 1}. {file} (Timestamp: {datetime.datetime.strptime(timestamp_data, "%Y%m%d_%H%M%S")})')
+    gaze_choice = int(input("Enter a number: ")) - 1
+    gaze_file = os.path.join(__datapath__, gaze_files[gaze_choice])
+
+    # Display validate files
+    print("\nAvailable Validate Data:")
+    for i, file in enumerate(validate_files):
+        info = re.search(r"system_(.*).json", file).group(1)
+        info = info.split("_")
+        print(f'{i + 1}. {file} (Timestamp: {datetime.datetime.strptime("_".join(info[-2:]), "%Y%m%d_%H%M%S")})')
+    validate_choice = int(input("Enter a number: ")) - 1
+    validate_file = os.path.join(__datapath__, validate_files[validate_choice])
+
+    # Process and save to CSV
     result = get_statistics(gaze_file=gaze_file, validate_file=validate_file)
-    print(result)
+    if csv is None:
+        print(tabulate(result, headers='keys', tablefmt='grid'))
+    result.to_csv(csv, index=False)
+    print(f"Results saved to {csv}")
+
+if __name__ == "__main__":
+    main()
