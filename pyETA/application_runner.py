@@ -1,22 +1,26 @@
 import sys
 import logging
 import click
+import pathlib
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
-    QLabel, QPushButton, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem,
-    QCheckBox, QSlider, QFrame, QSplitter, QFrame, QDialog, QDoubleSpinBox
+    QLabel, QPushButton, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem, QTableView,
+    QCheckBox, QSlider, QFrame, QSplitter, QFrame, QDialog, QDoubleSpinBox, QFileDialog
 )
+import PyQt6.QtWidgets as qtw
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QIcon
 from typing import Optional
 
-from pyETA import __version__, LOGGER
+from pyETA import __version__, LOGGER, __datapath__
 from pyETA.components.track import Tracker
 from pyETA.components.window import TrackerThread
+import pyETA.components.utils as eta_utils
+import pyETA.components.validate as eta_validate
 
 class StreamThread(QThread):
     update_gaze_signal = pyqtSignal(list, list, list)  # times, x, y
@@ -355,12 +359,41 @@ class EyeTrackerAnalyzer(QMainWindow):
     def create_metrics_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        metrics_title = QLabel("<h2>Statistics: Eye Tracker Validation</h2>")
+        metrics_datapath = QLabel(f"Searching data files at path: {__datapath__}")
+        gaze_file_label = QLabel("Selected gaze data timestamp: ")
+        validate_file_label = QLabel("Selected validation data timestamp: ")
+        file_selector = QHBoxLayout()
+        self.gaze_data = QComboBox()
+        self.gaze_data_items = sorted(eta_utils.get_file_names(prefix="gaze_data_"))
+        self.gaze_data.addItems(['select gaze data'] + [pathlib.Path(file).name for file in self.gaze_data_items])
+        self.gaze_data.currentIndexChanged.connect(lambda: gaze_file_label.setText(f"Selected gaze data timestamp: {eta_validate.get_gaze_data_timestamp(self.gaze_data.currentText())}"))
+
+        self.validate_data = QComboBox()
+        self.validate_data_items = eta_utils.get_file_names(prefix="system_")
+        self.validate_data.addItems(['select validation data'] + [pathlib.Path(file).name for file in self.validate_data_items])
+        self.validate_data.currentIndexChanged.connect(lambda: validate_file_label.setText(f"Selected validation data timestamp: {eta_validate.get_validate_data_timestamp(self.validate_data.currentText())}"))
+
+        file_selector.addWidget(self.gaze_data)
+        file_selector.addWidget(self.validate_data)
+        validate_btn = QPushButton("Validate")
+        self.df = pd.DataFrame()
+        validate_btn.clicked.connect(self.update_metrics_table)
+
+        layout.addWidget(metrics_title)
+        layout.addWidget(metrics_datapath)
+        layout.addWidget(gaze_file_label)
+        layout.addWidget(validate_file_label)
+        layout.addLayout(file_selector)
+        layout.addWidget(validate_btn)
+
 
         # Metrics Table
         self.metrics_table = QTableWidget()
-        self.metrics_table.setColumnCount(4)
-        self.metrics_table.setHorizontalHeaderLabels(["Metric", "Value", "Description", "Status"])
         layout.addWidget(self.metrics_table)
+        download_btn = QPushButton("Download CSV")
+        download_btn.clicked.connect(self.download_csv)
+        layout.addWidget(download_btn)
 
         return tab
 
@@ -414,12 +447,33 @@ class EyeTrackerAnalyzer(QMainWindow):
         self.fixation_plot.clear()
         self.fixation_plot.plot(x_coords, y_coords, pen=None, symbol='o', symbolSize=counts, symbolBrush=(255, 0, 0, 150))
 
-    def show_message(self, title, message, message_type=QMessageBox.information):
-        msg_box = QMessageBox()
-        msg_box.setIcon(message_type)
-        msg_box.setWindowTitle(title)
-        msg_box.setText(message)
-        msg_box.exec()
+    def update_metrics_table(self):
+        self.df = eta_validate.get_statistics(
+            gaze_file=self.gaze_data_items[self.gaze_data.currentIndex() - 1],
+            validate_file=self.validate_data_items[self.validate_data.currentIndex() - 1])
+        self.metrics_table.setRowCount(self.df.shape[0])
+        self.metrics_table.setColumnCount(self.df.shape[1])
+        self.metrics_table.setHorizontalHeaderLabels(self.df.columns)
+
+        for row in range(self.df.shape[0]):
+            for col in range(self.df.shape[1]):
+                item = QTableWidgetItem(str(self.df.iloc[row, col]))
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.metrics_table.setItem(row, col, item)
+        
+        self.metrics_table.setAlternatingRowColors(True)
+        self.metrics_table.resizeColumnsToContents()
+        self.statusBar().showMessage("Metrics generated successfully", 5000)
+
+    def download_csv(self):
+        if self.df.empty:
+            QMessageBox.critical(self, "Error", "No data to save as CSV")
+            return
+        
+        filename, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
+        if filename:
+            self.df.to_csv(filename, index=False)
+
 
 @click.command(name="application_runner")
 def main():

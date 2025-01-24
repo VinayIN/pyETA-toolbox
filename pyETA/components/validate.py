@@ -3,13 +3,13 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 import json
 import os
+import sys
 import click
 import re
 import datetime
 import pyETA.components.utils as eta_utils
 from pyETA import LOGGER, __datapath__
 from dataclasses import dataclass
-from tabulate import tabulate
 
 @dataclass
 class ValidateData:
@@ -147,39 +147,58 @@ def get_statistics(gaze_file: str, validate_file: str) -> pd.DataFrame:
     
     statistics = df_calculated.reset_index(drop=True).groupby("group").apply(calculate_statistics).reset_index(drop=True)
     
-    return statistics.round(4).astype(str)
+    return statistics.round(4)
 
-def list_files_with_prefix(directory: str, prefix: str) -> List[str]:
-    return sorted([f for f in os.listdir(directory) if f.startswith(prefix)])
+def get_gaze_data_timestamp(file: str) -> Optional[datetime.datetime]:
+    try:
+        timestamp_data = re.search(r"gaze_data_(.*).json", file).group(1)
+        return datetime.datetime.strptime(timestamp_data, "%Y%m%d_%H%M%S")
+    except AttributeError:
+        LOGGER.error(f"Invalid file name: {file}")
+        return None
+
+def get_validate_data_timestamp(file: str) -> Optional[datetime.datetime]:
+    try:
+        info = re.search(r"system_(.*).json", file).group(1)
+        info = info.split("_")
+        return datetime.datetime.strptime("_".join(info[-2:]), "%Y%m%d_%H%M%S")
+    except AttributeError:
+        LOGGER.error(f"Invalid file name: {file}")
+        return None
 
 @click.command("validate")
 @click.option('--csv', help="Name of the output CSV file.")
 def main(csv: Optional[str]):
     # List files in __datapath__
-    gaze_files = list_files_with_prefix(__datapath__, "gaze_data_")
-    validate_files = list_files_with_prefix(__datapath__, "system_")
+    gaze_files = sorted(eta_utils.get_file_names(prefix="gaze_data_"))
+    validate_files = sorted(eta_utils.get_file_names(prefix="system_"))
 
     # Display gaze files
     print("Available Gaze Data:")
     for i, file in enumerate(gaze_files):
-        timestamp_data = re.search(r"gaze_data_(.*).json", file).group(1)
-        print(f'{i + 1}. {file} (Timestamp: {datetime.datetime.strptime(timestamp_data, "%Y%m%d_%H%M%S")})')
-    gaze_choice = int(input("Enter a number: ")) - 1
-    gaze_file = os.path.join(__datapath__, gaze_files[gaze_choice])
+        print(f'{i + 1}. {file} (Timestamp: {get_gaze_data_timestamp(file)})')
+    try:
+        gaze_choice = int(input("Enter a number: ")) - 1
+        gaze_file = os.path.join(__datapath__, gaze_files[gaze_choice])
+    except (ValueError, IndexError):
+        LOGGER.error("Invalid input. Exiting...")
+        sys.exit(1)
 
     # Display validate files
     print("\nAvailable Validate Data:")
     for i, file in enumerate(validate_files):
-        info = re.search(r"system_(.*).json", file).group(1)
-        info = info.split("_")
-        print(f'{i + 1}. {file} (Timestamp: {datetime.datetime.strptime("_".join(info[-2:]), "%Y%m%d_%H%M%S")})')
-    validate_choice = int(input("Enter a number: ")) - 1
-    validate_file = os.path.join(__datapath__, validate_files[validate_choice])
+        print(f'{i + 1}. {file} (Timestamp: {get_validate_data_timestamp(file)})')
+    try:
+        validate_choice = int(input("Enter a number: ")) - 1
+        validate_file = os.path.join(__datapath__, validate_files[validate_choice])
+    except (ValueError, IndexError):
+        LOGGER.error("Invalid input. Exiting...")
+        sys.exit(1)
 
     # Process and save to CSV
     result = get_statistics(gaze_file=gaze_file, validate_file=validate_file)
     if csv is None:
-        print(tabulate(result, headers='keys', tablefmt='grid'))
+        print(result.describe())
     result.to_csv(csv, index=False)
     print(f"Results saved to {csv}")
 

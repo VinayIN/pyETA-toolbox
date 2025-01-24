@@ -638,7 +638,7 @@ def update_dropdown(gaze_data, validation_data):
 )
 def update_graph_metrics(n_clicks, gaze_data, validation_data):
     if n_clicks and gaze_data and validation_data:
-        var.metrics_df = eta_validate.get_statistics(gaze_data, validation_data)
+        var.metrics_df = eta_validate.get_statistics(gaze_data, validation_data).astype(str)
         content = dbc.Alert(
             "No data available for the selected files",
             color="danger", dismissable=True)
