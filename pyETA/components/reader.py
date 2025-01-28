@@ -1,6 +1,9 @@
 import datetime
+import threading
 from collections import defaultdict
 from pyETA import LOGGER
+import PyQt6.QtCore as qtc
+import numpy as np
 
 class GazeReader:
     def __init__(self):
@@ -73,3 +76,34 @@ class GazeReader:
         """
         self.buffer_times, self.buffer_x, self.buffer_y = [], [], []
         self.fixation_data.clear()
+
+class StreamThread(qtc.QThread):
+    update_gaze_signal = qtc.pyqtSignal(list, list, list)  # times, x, y
+    update_fixation_signal = qtc.pyqtSignal(list, list, list)  # x_coords, y_coords, counts
+
+    def __init__(self):
+        super().__init__()
+        self.running = False
+        self.id = None
+
+    def run(self):
+        self.running = True
+        self.id = threading.get_native_id() 
+        while self.running:
+            try:
+                # Simulated data
+                times = np.arange(10)
+                x = np.random.random(10) * 100
+                y = np.random.random(10) * 100
+                fixation_counts = np.random.randint(1, 10, 10)
+                self.update_gaze_signal.emit(times.tolist(), x.tolist(), y.tolist())
+                self.update_fixation_signal.emit(x.tolist(), y.tolist(), fixation_counts.tolist())
+                self.msleep(1000)
+            except Exception as e:
+                LOGGER.error(f"Stream error: {e}")
+
+    def stop(self):
+        self.running = False
+        self.id = None
+        self.quit()
+        self.wait()

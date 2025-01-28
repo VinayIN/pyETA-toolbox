@@ -17,41 +17,9 @@ from typing import Optional
 from pyETA import __version__, LOGGER, __datapath__
 from pyETA.components.track import Tracker
 from pyETA.components.window import TrackerThread
+from pyETA.components.reader import StreamThread
 import pyETA.components.utils as eta_utils
 import pyETA.components.validate as eta_validate
-
-class StreamThread(qtc.QThread):
-    update_gaze_signal = qtc.pyqtSignal(list, list, list)  # times, x, y
-    update_fixation_signal = qtc.pyqtSignal(list, list, list)  # x_coords, y_coords, counts
-
-    def __init__(self):
-        super().__init__()
-        self.running = False
-        self.id = None
-
-    def run(self):
-        self.running = True
-        self.id = threading.get_native_id() 
-        while self.running:
-            try:
-                # Simulated data for demonstration
-                times = np.arange(10)
-                x = np.random.random(10) * 100
-                y = np.random.random(10) * 100
-                fixation_counts = np.random.randint(1, 10, 10)
-                self.update_gaze_signal.emit(times.tolist(), x.tolist(), y.tolist())
-                self.update_fixation_signal.emit(x.tolist(), y.tolist(), fixation_counts.tolist())
-                self.msleep(1000)  # Simulate 1-second data intervals
-            except Exception as e:
-                LOGGER.error(f"Stream error: {e}")
-            finally:
-                self.stop()
-
-    def stop(self):
-        self.running = False
-        self.id = None
-        self.quit()
-        self.wait()
 
 class EyeTrackerAnalyzer(qtw.QMainWindow):
     def __init__(self):
@@ -60,6 +28,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.resize(1200, 800)
         self.stream_thread = None
         self.tracker_thread = None
+        self.validate_tracker_thread = None
 
         # Central widget and main layout
         central_widget = qtw.QWidget()
@@ -163,13 +132,14 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         system_buttons.addWidget(exit_button)
         system_buttons.addWidget(refresh_button)
         layout.addLayout(system_buttons)
-        layout.setSpacing(10)
+        layout.setSpacing(5)
 
         self.system_info_labels = {
             "status": qtw.QLabel(),
             "pid": qtw.QLabel(),
-            "stream pid": qtw.QLabel(),
-            "validate pid": qtw.QLabel(),
+            "stream id": qtw.QLabel(),
+            "tracker id": qtw.QLabel(),
+            "validate id": qtw.QLabel(),
             "runtime": qtw.QLabel(),
             "memory": qtw.QLabel(),
             "storage": qtw.QLabel(),
@@ -189,13 +159,14 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         storage_free = psutil.disk_usage(os.getcwd()).free / 1024**3  # Free storage in GB
         runtime = datetime.datetime.now() - datetime.datetime.fromtimestamp(process.create_time())
 
-        self.system_info_labels["pid"].setText(f"<strong>PID:</strong> {process.pid}")
-        self.system_info_labels["stream pid"].setText(f"<strong>Stream Thread ID:</strong> {self.stream_thread.id if self.stream_thread else None}")
-        self.system_info_labels["validate pid"].setText(f"<strong>Validate Thread ID:</strong> {self.tracker_thread.id if self.tracker_thread else None}")
+        self.system_info_labels["pid"].setText(f"<strong>Application PID:</strong> {process.pid}")
+        self.system_info_labels["stream id"].setText(f"<strong>Stream Thread ID:</strong> {self.stream_thread.id if self.stream_thread else None}")
+        self.system_info_labels["tracker id"].setText(f"<strong>Tracker Thread ID:</strong> {self.tracker_thread.id if self.tracker_thread else None}")
+        self.system_info_labels["validate id"].setText(f"<strong>Validate Thread ID:</strong> {self.validate_tracker_thread.id if self.validate_tracker_thread else None}")
         self.system_info_labels["runtime"].setText(f"<strong>Runtime:</strong> {runtime}")
         self.system_info_labels["memory"].setText(f"<strong>Memory:</strong> {memory_info.rss / 1024**2:.1f} MB")
-        self.system_info_labels["storage"].setText(f"<strong>Storage avail:</strong> {storage_free:.1f} GB")
-        self.system_info_labels["cpu"].setText(f"<strong>CPU:</strong> {cpu_percent:.1f}%")
+        self.system_info_labels["storage"].setText(f"<strong>Storage available:</strong> {storage_free:.1f} GB")
+        self.system_info_labels["cpu"].setText(f"<strong>CPU Usage:</strong> {cpu_percent:.1f}%")
 
     def refresh_application(self):
         # plots
@@ -323,7 +294,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         layout.addWidget(qtw.QLabel("Choose Validation Screen:"))
         layout.addWidget(screen_combo)
 
-        if self.tracker_thread and self.tracker_thread.isRunning():
+        if self.validate_tracker_thread and self.validate_tracker_thread.isRunning():
             qtw.QMessageBox.warning(self, "Warning", "Validation Tracker is already running. Please stop the stream")
             return
 
@@ -343,14 +314,14 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
                 from pyETA.components.window import run_validation_window
 
                 self.validation_window = run_validation_window(screen_index=selected_screen_index)
-                self.tracker_thread = TrackerThread(tracker_params)
-                self.tracker_thread.finished_signal.connect(
+                self.validate_tracker_thread = TrackerThread(tracker_params)
+                self.validate_tracker_thread.finished_signal.connect(
                     lambda msg: qtw.QMessageBox.information(self, "Tracking Thread", msg)
                 )
-                self.tracker_thread.error_signal.connect(
+                self.validate_tracker_thread.error_signal.connect(
                     lambda msg: qtw.QMessageBox.critical(self, "Tracking Thread", msg)
                 )
-                self.tracker_thread.start()
+                self.validate_tracker_thread.start()
                 self.validation_window.show()
 
                 self.statusBar().showMessage("Validation started", 10000)
@@ -385,8 +356,9 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         tab = qtw.QWidget()
         layout = qtw.QVBoxLayout(tab)
 
-        # Fixation Plot
         self.fixation_plot = pg.PlotWidget(title="Fixation Points")
+        self.fixation_plot.setXRange(0, self.size().width())
+        self.fixation_plot.setYRange(0, self.size().height())
         layout.addWidget(self.fixation_plot)
 
         return tab
@@ -442,10 +414,10 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             return
         tracker_params = {
             'data_rate': self.data_rate_slider.value(),
-            'use_mock': self.stream_type_combo.currentText() == "Mock",
+            'use_mock': self.stream_type_combo.currentText(),
             'fixation': self.fixation_check.isChecked(),
-            'velocity_threshold': 30,
-            'dont_screen_nans': True,
+            'velocity_threshold': self.velocity_threshold_spinbox.value(),
+            'dont_screen_nans': self.dont_screen_nans_check.isChecked(),
             'verbose': self.verbose_check.isChecked(),
             'push_stream': self.push_stream_check.isChecked(),
             'save_data': False,
@@ -455,7 +427,6 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             self.stream_thread.update_gaze_signal.connect(self.update_gaze_plot)
             self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
             self.stream_thread.start()
-            self.stream_pid = self.stream_thread.currentThreadId()
             self.statusBar().showMessage("Stream started successfully", 3000)
         except Exception as e:
             error_msg = f"Failed to start stream: {str(e)}"
@@ -468,9 +439,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             return
         try:
             self.stream_thread.stop()
-
             self.stream_thread = None
-            self.stream_pid = None
             self.statusBar().showMessage("Stream stopped successfully", 3000)
         except Exception as e:
             LOGGER.error(f"Error stopping stream: {str(e)}")
@@ -479,6 +448,9 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
     def update_gaze_plot(self, times, x, y):
         self.curve_x.setData(times, x)
         self.curve_y.setData(times, y)
+        if times:
+            self.gaze_plot_x.setXRange(min(times), max(times))
+            self.gaze_plot_y.setYRange(min(min(x), min(y)), max(max(x), max(y)))
 
     def update_fixation_plot(self, x_coords, y_coords, counts):
         self.fixation_plot.clear()
