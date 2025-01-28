@@ -6,43 +6,41 @@ import datetime
 import multiprocessing
 from typing import List, Optional
 import PyQt6.QtWidgets as qtw
+import PyQt6.QtGui as qtg
 import numpy as np
 import os
 import glob
 import psutil
-import signal
-import atexit
 from pyETA import __datapath__, LOGGER
 
-def get_current_screen_size(dialog=False):
+def get_current_screen_size(screen_index=0):
     app = qtw.QApplication.instance()
-    if app is None:
-        app = qtw.QApplication(sys.argv)
-    if dialog:
-        screen_dialog = qtw.QDialog()
-        screen_dialog.setWindowTitle("Select Screen")
-        layout = qtw.QVBoxLayout(screen_dialog)
+    app_created = False
 
-        screen_combo = qtw.QComboBox()
-        for i, screen in enumerate(app.screens()):
-            screen_combo.addItem(f"Screen {i+1}")
-        layout.addWidget(screen_combo)
-
-        button_box = qtw.QDialogButtonBox(qtw.QDialogButtonBox.StandardButton.Ok | 
-                                        qtw.QDialogButtonBox.StandardButton.Cancel)
-        button_box.accepted.connect(screen_dialog.accept)
-        button_box.rejected.connect(screen_dialog.reject)
-        layout.addWidget(button_box)
-
-        if screen_dialog.exec() == qtw.QDialog.DialogCode.Accepted:
-            selected_screen = app.screens()[screen_combo.currentIndex()]
-            size = selected_screen.size()
-            return size.width(), size.height()
+    if app:
+        LOGGER.info("This framework application already exists. Using an instance!")
     else:
-        screen = app.primaryScreen()
-        size = screen.size()
-        return size.width(), size.height()
-    return None, None
+        app = qtw.QApplication(sys.argv)
+        app_created = True
+        LOGGER.info("Created a new application to fetch the geometry!")
+
+    screens = app.screens()
+
+    try:
+        if screen_index < len(screens):
+            screen = screens[screen_index]
+            geometry = screen.geometry()
+            return geometry.width(), geometry.height()
+        else:
+            raise ValueError(f"Invalid screen index. Only {len(screens)} screen(s) available. (starting index from 0)")
+    except Exception as e:
+        LOGGER.error(str(e))
+        raise e
+    finally:
+        if app_created:
+            app.quit()
+            LOGGER.info("Quitting the application created to fetch the geometry.")
+    return 0, 0
 
 def get_system_info():
     node = platform.node()
@@ -169,13 +167,11 @@ def get_file_names(prefix, directory=None):
         return glob.glob(os.path.join(directory, f'{prefix}*'))
     return []
 
+
 class ProcessStatus:
     """Class to maintain process status and error information"""
     def __init__(self):
         self.active_processes = {}
-        atexit.register(self.cleanup)
-        signal.signal(signal.SIGTERM, self._signal_handler)
-        signal.signal(signal.SIGINT, self._signal_handler)
     
     def add_process(self, pid, process):
         self.active_processes[pid] = {
@@ -200,12 +196,6 @@ class ProcessStatus:
 
     def get_process_info(self, pid):
         return self.active_processes.get(pid)
-    
-    def _signal_handler(self, signum, frame):
-        """Handle termination signals"""
-        LOGGER.info(f"Received signal {signum}")
-        self.cleanup()
-        sys.exit(0)
     
     def cleanup(self):
         LOGGER.info("Cleaning up initiated!")
@@ -236,3 +226,4 @@ class ProcessStatus:
                 LOGGER.error(f"Error during cleanup process {p.pid}: {str(e)}")
         self.active_processes.clear()
         LOGGER.info("Cleanup complete")
+

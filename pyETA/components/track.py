@@ -11,8 +11,8 @@ from mne_lsl import lsl
 from collections import namedtuple
 from dataclasses import dataclass
 from pyETA import __datapath__, LOGGER
-import pyETA.components.mock as eta_mock
-import pyETA.components.utils as eta_utils
+from pyETA.components import mock
+from pyETA.components import utils
 try:
     import tobii_research as tr
 except ModuleNotFoundError:
@@ -38,15 +38,17 @@ class Tracker:
             use_mock=False,
             fixation=False,
             velocity_threshold=0.5,
-            screen_nans=True,
+            accept_screen_nans=False,
             verbose=False,
             push_stream=False,
             save_data=False,
+            screen_index=0,
             **kwargs
         ):
-        self.screen_width, self.screen_height = eta_utils.get_current_screen_size()
+        self.screen_index = screen_index
+        self.screen_width, self.screen_height = utils.get_current_screen_size(self.screen_index)
         self.data_rate = data_rate
-        self.screen_nans = screen_nans
+        self.accept_screen_nans = accept_screen_nans
         self.verbose = verbose
         self.save_data = save_data
         self.use_mock = use_mock
@@ -60,9 +62,9 @@ class Tracker:
         try:
             if self.use_mock:
                 LOGGER.info("Using a mock service.")
-                self.gaze_id = eta_mock.EYETRACKER_GAZE_DATA
+                self.gaze_id = mock.EYETRACKER_GAZE_DATA
                 
-                self.eyetracker = eta_mock.MockEyeTracker(data_rate=self.data_rate, verbose=self.verbose)
+                self.eyetracker = mock.MockEyeTracker(data_rate=self.data_rate, verbose=self.verbose)
                 self.eyetracker.start()
             else:
                 LOGGER.info("Using tobii to find eyetrackers.")
@@ -139,8 +141,8 @@ class Tracker:
         Filter = namedtuple('Filter', elements)
         objects = {}
         for keyword in elements:
-            filter_element = eta_utils.OneEuroFilter(
-                initial_time=eta_utils.get_timestamp(),
+            filter_element = utils.OneEuroFilter(
+                initial_time=utils.get_timestamp(),
                 initial_value=0.0,
                 min_cutoff=min_cutoff,
                 beta=beta
@@ -200,8 +202,7 @@ class Tracker:
             raise ValueError(f"Unknown element: {element}")
 
     def _collect_gaze_data(self, gaze_data):
-        timestamp = eta_utils.get_timestamp()
-        LOGGER.debug(f"gaze: {timestamp}")
+        timestamp = utils.get_timestamp()
         if self.fixation:
             # left eye
             self._update_fixation_data(
@@ -242,24 +243,24 @@ class Tracker:
         }
         
         stream_data = np.array([
-                    data["left_eye"]["gaze_point"][0] if data["left_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
-                    data["left_eye"]["gaze_point"][1] if data["left_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
-                    data["left_eye"]["pupil_diameter"] if data["left_eye"]["pupil_diameter"] else 0 if self.screen_nans else np.nan,
+                    data["left_eye"]["gaze_point"][0] if data["left_eye"]["gaze_point"] else np.nan if self.accept_screen_nans else 0,
+                    data["left_eye"]["gaze_point"][1] if data["left_eye"]["gaze_point"] else np.nan if self.accept_screen_nans else 0,
+                    data["left_eye"]["pupil_diameter"] if data["left_eye"]["pupil_diameter"] else np.nan if self.accept_screen_nans else 0,
                     data["left_eye"]["fixated"],
                     data["left_eye"]["velocity"],
                     data["left_eye"]["fixation_timestamp"],
                     data["left_eye"]["fixation_elapsed"],
-                    data["left_eye"]["filtered_gaze_point"][0] if data["left_eye"]["filtered_gaze_point"] else 0 if self.screen_nans else np.nan,
-                    data["left_eye"]["filtered_gaze_point"][1] if data["left_eye"]["filtered_gaze_point"] else 0 if self.screen_nans else np.nan,
-                    data["right_eye"]["gaze_point"][0] if data["right_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
-                    data["right_eye"]["gaze_point"][1] if data["right_eye"]["gaze_point"] else 0 if self.screen_nans else np.nan,
-                    data["right_eye"]["pupil_diameter"] if data["right_eye"]["pupil_diameter"] else 0 if self.screen_nans else np.nan,
+                    data["left_eye"]["filtered_gaze_point"][0] if data["left_eye"]["filtered_gaze_point"] else np.nan if self.accept_screen_nans else 0,
+                    data["left_eye"]["filtered_gaze_point"][1] if data["left_eye"]["filtered_gaze_point"] else np.nan if self.accept_screen_nans else 0,
+                    data["right_eye"]["gaze_point"][0] if data["right_eye"]["gaze_point"] else np.nan if self.accept_screen_nans else 0,
+                    data["right_eye"]["gaze_point"][1] if data["right_eye"]["gaze_point"] else np.nan if self.accept_screen_nans else 0,
+                    data["right_eye"]["pupil_diameter"] if data["right_eye"]["pupil_diameter"] else np.nan if self.accept_screen_nans else 0,
                     data["right_eye"]["fixated"],
                     data["right_eye"]["velocity"],
                     data["right_eye"]["fixation_timestamp"],
                     data["right_eye"]["fixation_elapsed"],
-                    data["right_eye"]["filtered_gaze_point"][0] if data["right_eye"]["filtered_gaze_point"] else 0 if self.screen_nans else np.nan,
-                    data["right_eye"]["filtered_gaze_point"][1] if data["right_eye"]["filtered_gaze_point"] else 0 if self.screen_nans else np.nan,
+                    data["right_eye"]["filtered_gaze_point"][0] if data["right_eye"]["filtered_gaze_point"] else np.nan if self.accept_screen_nans else 0,
+                    data["right_eye"]["filtered_gaze_point"][1] if data["right_eye"]["filtered_gaze_point"] else np.nan if self.accept_screen_nans else 0,
                     self.screen_width,
                     self.screen_height,
                     data["timestamp"],
@@ -309,10 +310,10 @@ class Tracker:
     def stop_tracking(self):
         try:
             if self.eyetracker:
-                LOGGER.debug("Stopping tracking...")
+                LOGGER.info("Stopping tracking...")
                 self.eyetracker.unsubscribe_from(self.gaze_id, self._collect_gaze_data)
             else:
-                LOGGER.debug("No eye tracker found!")
+                LOGGER.info("No eye tracker found!")
         except Exception as e:
             LOGGER.debug(f"Error stopping tracking: {e}")
 
@@ -323,21 +324,23 @@ class Tracker:
 @click.option("--use_mock", is_flag=True, help="Use this to start the mock service")
 @click.option("--fixation", is_flag=True, help="Use this to add fixations duration to the data stream")
 @click.option("--velocity", type=float, default=1.5, help="The velocity threshold for fixation")
-@click.option("--dont_screen_nans", is_flag=True, help="Use this to avoid correcting for NaNs")
+@click.option("--accept_screen_nans", is_flag=True, help="Use this to avoid correcting for NaNs")
 @click.option("--save_data", is_flag=True, help="Save the data to a file")
 @click.option("--verbose", is_flag=True, help="Use this to display LOGGER.debug statements")
 @click.option("--duration", type=float, help="The duration for which to track the data")
-def main(push_stream, data_rate, use_mock, fixation, velocity, dont_screen_nans, save_data, verbose, duration):
+@click.option("--screen_index", type=int, default=0, help="The index of the screen to use")
+def main(push_stream, data_rate, use_mock, fixation, velocity, accept_screen_nans, save_data, verbose, duration, screen_index):
     LOGGER.debug(f"Arguments: {locals()}")
     tracker = Tracker(
         data_rate=data_rate,
         use_mock=use_mock,
         fixation=fixation,
         velocity_threshold=velocity,
-        screen_nans=not dont_screen_nans,
+        accept_screen_nans=accept_screen_nans,
         verbose=verbose,
         push_stream=push_stream,
-        save_data=save_data
+        save_data=save_data,
+        screen_index=screen_index
     )
     if duration:
         tracker.start_tracking(duration=duration)

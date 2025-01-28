@@ -1,682 +1,526 @@
-import multiprocessing.process
-import os
-import re
-import time
+import sys
+import click
+import pathlib
 import psutil
-import asyncio
-import multiprocessing
-import atexit
-import dash
+import os
 import datetime
+import threading
+import numpy as np
 import pandas as pd
-from pyETA import __version__, __datapath__, LOGGER
-from pyETA.components.window import run_validation_window
+import pyqtgraph as pg
+
+import PyQt6.QtWidgets as qtw
+import PyQt6.QtCore as qtc
+import PyQt6.QtGui as qtg
+from typing import Optional
+
+from pyETA import __version__, LOGGER, __datapath__
 from pyETA.components.track import Tracker
+from pyETA.components.window import TrackerThread
 import pyETA.components.utils as eta_utils
 import pyETA.components.validate as eta_validate
-import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output
-import plotly.graph_objs as go
-import pylsl
-import pathlib
-import click
-import pyETA.components.reader as eta_reader
-from threading import Thread
 
-class Variable:
-    inlet = None
-    metrics_df = pd.DataFrame()
-    reader = eta_reader.GazeReader()
-    stream_thread = None
-    width, height = eta_utils.get_current_screen_size()
+class StreamThread(qtc.QThread):
+    update_gaze_signal = qtc.pyqtSignal(list, list, list)  # times, x, y
+    update_fixation_signal = qtc.pyqtSignal(list, list, list)  # x_coords, y_coords, counts
 
-    def refresh_gaze(self):
-        if self.stream_thread and self.stream_thread.is_alive():
-            self.reader.stop()
-            self.stream_thread.join()
-            self.reader = eta_reader.GazeReader()
-            self.start_stream_thread()
+    def __init__(self):
+        super().__init__()
+        self.running = False
+        self.id = None
 
-    def start_stream_thread(self):
-        if self.inlet and not (self.stream_thread and self.stream_thread.is_alive()):
-            self.reader.running = True
-            self.stream_thread = Thread(
-                target=self.reader.read_stream,
-                args=(self.inlet,),
-                daemon=True
-            )
+    def run(self):
+        self.running = True
+        self.id = threading.get_native_id() 
+        while self.running:
+            try:
+                # Simulated data for demonstration
+                times = np.arange(10)
+                x = np.random.random(10) * 100
+                y = np.random.random(10) * 100
+                fixation_counts = np.random.randint(1, 10, 10)
+                self.update_gaze_signal.emit(times.tolist(), x.tolist(), y.tolist())
+                self.update_fixation_signal.emit(x.tolist(), y.tolist(), fixation_counts.tolist())
+                self.msleep(1000)  # Simulate 1-second data intervals
+            except Exception as e:
+                LOGGER.error(f"Stream error: {e}")
+            finally:
+                self.stop()
+
+    def stop(self):
+        self.running = False
+        self.id = None
+        self.quit()
+        self.wait()
+
+class EyeTrackerAnalyzer(qtw.QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle(f"pyETA-{__version__}")
+        self.resize(1200, 800)
+        self.stream_thread = None
+        self.tracker_thread = None
+
+        # Central widget and main layout
+        central_widget = qtw.QWidget()
+        self.setCentralWidget(central_widget)
+
+        # Splitter for collapsible sidebar
+        splitter = qtw.QSplitter(qtc.Qt.Orientation.Horizontal, central_widget)
+
+        # Sidebar
+        self.sidebar = self.create_sidebar()
+        splitter.addWidget(self.sidebar)
+        self.system_info_timer = qtc.QTimer()
+        self.system_info_timer.timeout.connect(self.update_system_info)
+        self.system_info_timer.start(1000)
+
+        # Main content area
+        main_content_widget = qtw.QWidget()
+        main_layout = qtw.QVBoxLayout(main_content_widget)
+
+        # Stream Configuration and System Info
+        config_info_layout = qtw.QVBoxLayout()
+        stream_config_layout = self.create_stream_configuration()
+        config_info_layout.addLayout(stream_config_layout)
+        line = qtw.QFrame()
+        line.setFrameShape(qtw.QFrame.Shape.HLine)
+        config_info_layout.addWidget(line)
+        main_layout.addLayout(config_info_layout)
+
+        # Tabs
+        self.tab_widget = qtw.QTabWidget()
+        main_layout.addWidget(self.tab_widget)
+        self.setup_tabs()
+
+        splitter.addWidget(main_content_widget)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 4)
+
+        # Finalize layout
+        layout = qtw.QVBoxLayout(central_widget)
+        layout.addWidget(splitter)
+
+        self.setStyleSheet("""
+            QPushButton:hover {
+                border: 1px solid black;
+                border-radius: 5px;
+                background-color: #2ECC71; 
+            }
+        """)
+
+    def create_sidebar(self):
+        frame = qtw.QFrame()
+        layout = qtw.QVBoxLayout(frame)
+
+        title = qtw.QLabel("<h1>Toolbox - Eye Tracker Analyzer</h1>")
+        title.setStyleSheet("color: gray; margin-bottom: 10px;")
+        layout.addWidget(title)
+
+        faculty_info = qtw.QLabel(
+            """<h3 style='color: #555;'>Faculty 1</h3>
+            <a href='https://www.b-tu.de/en/fg-neuroadaptive-hci/' style='text-decoration: none;' target='_blank'>
+                <strong> Neuroadaptive Human-Computer Interaction</strong><br>
+                Brandenburg University of Technology (Cottbus-Senftenberg)
+            </a>"""
+        )
+        faculty_info.setStyleSheet("margin-bottom: 20px;")
+        layout.addWidget(faculty_info)
+
+        source_code_link = qtw.QLabel(
+            """<h3 style='color: #555;'>Source code</h3>
+            <a href='https://github.com/VinayIN/EyeTrackerAnalyzer.git' style='text-decoration: none;' target='_blank'>
+                https://github.com/VinayIN/EyeTrackerAnalyzer.git
+            </a>"""
+        )
+
+        markdown_text = qtw.QLabel(
+            f"""<p>pyETA, Version: <code>{__version__}</code></p>
+            <p>This interface allows you to validate the eye tracker accuracy along with the following:</p>
+            <ul>
+                <li>View gaze points</li>
+                <li>View fixation points</li>
+                <li>View eye tracker accuracy</li>
+                <ul><li>Comparing the gaze data with validation grid locations.</li></ul>
+            </ul>"""
+        )
+        layout.addWidget(markdown_text)
+        layout.addWidget(source_code_link)
+
+        self.system_info_card = self.create_system_info_card()
+        layout.addWidget(self.system_info_card)
+        return frame
+
+    def create_system_info_card(self):
+        card = qtw.QFrame()
+        card.setFrameShape(qtw.QFrame.Shape.Box)
+        layout = qtw.QVBoxLayout(card)
+        system_buttons = qtw.QHBoxLayout()
+        refresh_button = qtw.QPushButton("Refresh")
+        exit_button = qtw.QPushButton("Exit")
+        exit_button.clicked.connect(self.close)
+        refresh_button.clicked.connect(self.refresh_application)
+        system_buttons.addWidget(exit_button)
+        system_buttons.addWidget(refresh_button)
+        layout.addLayout(system_buttons)
+        layout.setSpacing(10)
+
+        self.system_info_labels = {
+            "status": qtw.QLabel(),
+            "pid": qtw.QLabel(),
+            "stream pid": qtw.QLabel(),
+            "validate pid": qtw.QLabel(),
+            "runtime": qtw.QLabel(),
+            "memory": qtw.QLabel(),
+            "storage": qtw.QLabel(),
+            "cpu": qtw.QLabel(),
+        }
+
+        for label_name, label in self.system_info_labels.items():
+            layout.addWidget(label)
+
+        self.update_system_info()
+        return card
+
+    def update_system_info(self):
+        process = psutil.Process(os.getpid())
+        memory_info = process.memory_info()
+        cpu_percent = process.cpu_percent(interval=0.1)
+        storage_free = psutil.disk_usage(os.getcwd()).free / 1024**3  # Free storage in GB
+        runtime = datetime.datetime.now() - datetime.datetime.fromtimestamp(process.create_time())
+
+        self.system_info_labels["pid"].setText(f"<strong>PID:</strong> {process.pid}")
+        self.system_info_labels["stream pid"].setText(f"<strong>Stream Thread ID:</strong> {self.stream_thread.id if self.stream_thread else None}")
+        self.system_info_labels["validate pid"].setText(f"<strong>Validate Thread ID:</strong> {self.tracker_thread.id if self.tracker_thread else None}")
+        self.system_info_labels["runtime"].setText(f"<strong>Runtime:</strong> {runtime}")
+        self.system_info_labels["memory"].setText(f"<strong>Memory:</strong> {memory_info.rss / 1024**2:.1f} MB")
+        self.system_info_labels["storage"].setText(f"<strong>Storage avail:</strong> {storage_free:.1f} GB")
+        self.system_info_labels["cpu"].setText(f"<strong>CPU:</strong> {cpu_percent:.1f}%")
+
+    def refresh_application(self):
+        # plots
+        self.gaze_plot_x.clear()
+        self.gaze_plot_y.clear()
+        self.fixation_plot.clear()
+
+        # dropdown
+        self.update_metric_tab()
+
+        # metric table
+        self.metrics_table.clear()
+
+        self.statusBar().showMessage("Application refreshed successfully", 5000)
+    
+    def create_stream_configuration(self):
+        # Main Horizontal Layout
+        main_layout = qtw.QHBoxLayout()
+
+        layout_first = qtw.QVBoxLayout()
+
+        # Stream Type
+        stream_type_layout = qtw.QHBoxLayout()
+        stream_type_label = qtw.QLabel("Stream Type:")
+        self.stream_type_combo = qtw.QComboBox()
+        self.stream_type_combo.addItems(["Eye-Tracker", "Mock"])
+        stream_type_layout.addWidget(stream_type_label)
+        stream_type_layout.addWidget(self.stream_type_combo)
+        layout_first.addLayout(stream_type_layout)
+
+        # Data Rate
+        data_rate_layout = qtw.QHBoxLayout()
+        data_rate_label = qtw.QLabel("Data Rate (Hz):")
+        self.data_rate_slider = qtw.QSlider(qtc.Qt.Orientation.Horizontal)
+        self.data_rate_slider.setMinimum(0)
+        self.data_rate_slider.setMaximum(800)
+        self.data_rate_slider.setValue(600)
+        self.data_rate_label = qtw.QLabel("600 Hz")
+        self.data_rate_slider.valueChanged.connect(lambda value: self.data_rate_label.setText(f"{value} Hz"))
+        data_rate_layout.addWidget(data_rate_label)
+        data_rate_layout.addWidget(self.data_rate_slider)
+        data_rate_layout.addWidget(self.data_rate_label)
+        layout_first.addLayout(data_rate_layout)
+
+        # Velocity Threshold
+        velocity_threshold_layout = qtw.QHBoxLayout()
+        velocity_threshold_label = qtw.QLabel("Velocity Threshold:")
+        self.velocity_threshold_spinbox = qtw.QDoubleSpinBox()
+        self.velocity_threshold_spinbox.setRange(0.0, 5.0)
+        self.velocity_threshold_spinbox.setValue(1.5)
+        self.velocity_threshold_spinbox.setSingleStep(0.1)
+        self.velocity_threshold_spinbox.valueChanged.connect(lambda value: self.velocity_threshold_label.setText(f"{value:.1f}"))
+        self.velocity_threshold_label = qtw.QLabel("1.5")
+        velocity_threshold_layout.addWidget(velocity_threshold_label)
+        velocity_threshold_layout.addWidget(self.velocity_threshold_spinbox)
+        velocity_threshold_layout.addWidget(self.velocity_threshold_label)
+        layout_first.addLayout(velocity_threshold_layout)
+
+        main_layout.addLayout(layout_first)
+
+        layout_second = qtw.QVBoxLayout()
+
+        # Fixation Checkbox
+        self.fixation_check = qtw.QCheckBox("Enable Fixation")
+        self.fixation_check.setChecked(True)
+        layout_second.addWidget(self.fixation_check)
+
+        # Push to Stream Checkbox
+        self.push_stream_check = qtw.QCheckBox("Push to Stream")
+        self.push_stream_check.setChecked(True)
+        layout_second.addWidget(self.push_stream_check)
+
+        # Verbose Checkbox
+        self.verbose_check = qtw.QCheckBox("Verbose Mode")
+        layout_second.addWidget(self.verbose_check)
+
+        # Don't Screen NaNs Checkbox
+        self.dont_screen_nans_check = qtw.QCheckBox("Accept Screen NaNs (Default: 0)")
+        layout_second.addWidget(self.dont_screen_nans_check)
+
+        # Add Right Layout to Main Layout
+        main_layout.addLayout(layout_second)
+
+        # Stream Control Buttons (Below Both VBoxes)
+        control_layout = qtw.QVBoxLayout()
+        start_stop_layout = qtw.QHBoxLayout()
+        self.start_stream_btn = qtw.QPushButton("Start Stream")
+        self.stop_stream_btn = qtw.QPushButton("Stop Stream")
+        self.start_stream_btn.clicked.connect(self.start_stream)
+        self.stop_stream_btn.clicked.connect(self.stop_stream)
+        start_stop_layout.addWidget(self.start_stream_btn)
+        start_stop_layout.addWidget(self.stop_stream_btn)
+        control_layout.addLayout(start_stop_layout)
+
+        self.validate_btn = qtw.QPushButton("Validate Eye Tracker")
+        self.validate_btn.clicked.connect(self.validate_eye_tracker)
+        control_layout.addWidget(self.validate_btn)
+
+        # Add Control Layout to Main Layout
+        main_layout.addLayout(control_layout)
+
+        return main_layout
+
+    def setup_tabs(self):
+        # Tabs: Gaze Data, Fixation, Metrics
+        self.gaze_tab = self.create_gaze_data_tab()
+        self.fixation_tab = self.create_fixation_tab()
+        self.metrics_tab = self.create_metrics_tab()
+
+        self.tab_widget.addTab(self.gaze_tab, "Gaze Data")
+        self.tab_widget.addTab(self.fixation_tab, "Fixation")
+        self.tab_widget.addTab(self.metrics_tab, "Metrics")
+
+    def validate_eye_tracker(self):
+        # Screen Selection Dialog
+        screen_dialog = qtw.QDialog()
+        screen_dialog.setWindowTitle("Select Validation Screen")
+        layout = qtw.QVBoxLayout(screen_dialog)
+
+        screens = qtw.QApplication.screens()
+        screen_combo = qtw.QComboBox()
+        for i, screen in enumerate(screens):
+            screen_combo.addItem(f"Screen {i+1}: {screen.geometry().width()}x{screen.geometry().height()}")
+
+        layout.addWidget(qtw.QLabel("Choose Validation Screen:"))
+        layout.addWidget(screen_combo)
+
+        if self.tracker_thread and self.tracker_thread.isRunning():
+            qtw.QMessageBox.warning(self, "Warning", "Validation Tracker is already running. Please stop the stream")
+            return
+
+        def start_validation():
+            selected_screen_index = screen_combo.currentIndex()
+            tracker_params = {
+                'use_mock': self.stream_type_combo.currentText() == "Mock",
+                'fixation': False,
+                'verbose': self.verbose_check.isChecked(),
+                'push_stream': False,
+                'save_data': True,
+                'screen_index': selected_screen_index,
+                'duration': (9*(2000+1000))/1000 + (2000*3)/1000 + 2000/1000
+            }
+
+            try:
+                from pyETA.components.window import run_validation_window
+
+                self.validation_window = run_validation_window(screen_index=selected_screen_index)
+                self.tracker_thread = TrackerThread(tracker_params)
+                self.tracker_thread.finished_signal.connect(
+                    lambda msg: qtw.QMessageBox.information(self, "Tracking Thread", msg)
+                )
+                self.tracker_thread.error_signal.connect(
+                    lambda msg: qtw.QMessageBox.critical(self, "Tracking Thread", msg)
+                )
+                self.tracker_thread.start()
+                self.validation_window.show()
+
+                self.statusBar().showMessage("Validation started", 10000)
+                screen_dialog.close()
+
+            except Exception as e:
+                qtw.QMessageBox.critical(self, "Validation Error", str(e))
+                LOGGER.error(f"Validation error: {str(e)}")
+
+        validate_btn = qtw.QPushButton("Start Validation")
+        validate_btn.clicked.connect(start_validation)
+        layout.addWidget(validate_btn)
+        screen_dialog.exec()
+
+    def create_gaze_data_tab(self):
+        tab = qtw.QWidget()
+        layout = qtw.QVBoxLayout(tab)
+
+        # Gaze X Plot
+        self.gaze_plot_x = pg.PlotWidget(title="Gaze X Position")
+        self.curve_x = self.gaze_plot_x.plot(pen='r')
+        layout.addWidget(self.gaze_plot_x)
+
+        # Gaze Y Plot
+        self.gaze_plot_y = pg.PlotWidget(title="Gaze Y Position")
+        self.curve_y = self.gaze_plot_y.plot(pen='b')
+        layout.addWidget(self.gaze_plot_y)
+
+        return tab
+
+    def create_fixation_tab(self):
+        tab = qtw.QWidget()
+        layout = qtw.QVBoxLayout(tab)
+
+        # Fixation Plot
+        self.fixation_plot = pg.PlotWidget(title="Fixation Points")
+        layout.addWidget(self.fixation_plot)
+
+        return tab
+    
+    def get_gaze_and_validate_data(self):
+        gaze = sorted(eta_utils.get_file_names(prefix="gaze_data_"))
+        validate = sorted(eta_utils.get_file_names(prefix="system_"))
+        return gaze, validate
+
+    def create_metrics_tab(self):
+        tab = qtw.QWidget()
+        layout = qtw.QVBoxLayout(tab)
+        metrics_title = qtw.QLabel("<h2>Statistics: Eye Tracker Validation</h2>")
+        metrics_datapath = qtw.QLabel(f"Searching data files at path: {__datapath__}")
+        file_selector = qtw.QHBoxLayout()
+        
+        self.gaze_data = qtw.QComboBox()
+        self.validate_data = qtw.QComboBox()
+
+        file_selector.addWidget(self.gaze_data)
+        file_selector.addWidget(self.validate_data)
+        self.update_metric_tab()
+
+        validate_btn = qtw.QPushButton("Validate")
+        self.df = pd.DataFrame()
+        validate_btn.clicked.connect(self.update_metrics_table)
+
+        layout.addWidget(metrics_title)
+        layout.addWidget(metrics_datapath)
+        layout.addLayout(file_selector)
+        layout.addWidget(validate_btn)
+
+
+        # Metrics Table
+        self.metrics_table = qtw.QTableWidget()
+        layout.addWidget(self.metrics_table)
+        download_btn = qtw.QPushButton("Download CSV")
+        download_btn.clicked.connect(self.download_csv)
+        layout.addWidget(download_btn)
+
+        return tab
+    
+    def update_metric_tab(self):
+        self.gaze_data_items, self.validate_data_items = self.get_gaze_and_validate_data()
+        self.gaze_data.clear()
+        self.gaze_data.addItems(['select gaze data'] + [f"File {idx+1}: {eta_validate.get_gaze_data_timestamp(file)}" for idx, file in enumerate(self.gaze_data_items)])
+        self.validate_data.clear()
+        self.validate_data.addItems(['select validation data'] + [f"File {idx+1} {eta_validate.get_validate_data_timestamp(file)}" for idx,file in enumerate(self.validate_data_items)])
+
+    def start_stream(self):
+        if self.stream_thread and self.stream_thread.isRunning():
+            qtw.QMessageBox.warning(self, "Warning", "Stream is already running.")
+            return
+        tracker_params = {
+            'data_rate': self.data_rate_slider.value(),
+            'use_mock': self.stream_type_combo.currentText() == "Mock",
+            'fixation': self.fixation_check.isChecked(),
+            'velocity_threshold': 30,
+            'dont_screen_nans': True,
+            'verbose': self.verbose_check.isChecked(),
+            'push_stream': self.push_stream_check.isChecked(),
+            'save_data': False,
+            }
+        try:
+            self.stream_thread = StreamThread()
+            self.stream_thread.update_gaze_signal.connect(self.update_gaze_plot)
+            self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
             self.stream_thread.start()
-            LOGGER.info("Started gaze data streaming thread")
+            self.stream_pid = self.stream_thread.currentThreadId()
+            self.statusBar().showMessage("Stream started successfully", 3000)
+        except Exception as e:
+            error_msg = f"Failed to start stream: {str(e)}"
+            self.statusBar().showMessage(error_msg, 5000)
+            LOGGER.error(error_msg)
 
-    def stop_stream_thread(self):
-        if self.stream_thread and self.stream_thread.is_alive():
-            self.reader.stop()
-            self.stream_thread.join()
-            LOGGER.info("Stopped gaze data streaming thread")
-
-
-var = Variable()
-process_manager = eta_utils.ProcessStatus()
-
-def run_async_function(async_func):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(async_func())
-    loop.close()
-
-app = dash.Dash(
-    __package__,
-    external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP],
-    suppress_callback_exceptions=True
-)
-app.title = "Eye Tracker Analyzer"
-app._favicon = "favicon.ico"
-
-app.layout = dbc.Container([
-    dbc.Row([
-        dbc.Col([
-            dash.html.H1("Toolbox - Eye Tracker Analyzer", className="my-4 text-muted"),
-            dash.html.A([
-                    dbc.Badge("Faculty 1", color="secondary", class_name='me-2'),
-                    dash.html.Strong("Neuroadaptive Human-Computer Interaction", className="text-muted"),
-                    dash.html.P("Brandenburg University of Technology (Cottbus-Senftenberg)", className="text-muted")
-                ],
-                href="https://www.b-tu.de/en/fg-neuroadaptive-hci/",
-                style={"text-decoration": "none"},
-                target="_blank"
-            )
-        ]),
-        dbc.Col(
-            dbc.ButtonGroup([
-                dbc.Button(href="/", color="secondary", outline=True, class_name="bi bi-house-door-fill"),
-                dbc.Button(href="/docs", color="secondary", outline=True, disabled=True, class_name="bi bi-book"),
-            ], class_name="float-end"),
-            width="auto"
-        ),
-    ], class_name="mb-4"),
-    dash.html.Hr(),
-    dbc.Row([
-        dbc.Col([
-            dash.dcc.Markdown(
-                f"""
-                pyETA, Version: `{__version__}`
-
-                This interface allows you to validate the eye tracker accuracy along with the following:
-                - View gaze points
-                - View fixation points
-                - View eye tracker accuracy
-                    * Comparing the gaze data with validation grid locations.
-                """,
-                className="mb-4"
-            ),
-        ]),
-        dbc.Col([
-            dbc.Card(dbc.CardBody([
-                dbc.Row([
-                    dash.html.Div(id='lsl-status'),
-                    dash.dcc.Interval(id='status-interval', interval=1000, n_intervals=0),
-                    dash.html.Div(id='process-error'),
-                    dbc.Col([
-                        dash.dcc.RadioItems(
-                            options=[
-                                {"label": " Mock", "value": "mock"},
-                                {"label": " Eye-Tracker", "value": "eye-tracker"}
-                            ],
-                            value='eye-tracker',
-                            id="tracker-type"
-                        ),
-                        dbc.Label("Data Rate (Hz)"),
-                        dash.dcc.Slider(
-                            min=0, step=100, max=800, value=600,
-                            id="tracker-data-rate",
-                        ),
-                        dash.dcc.Checklist(
-                            options=[
-                                {"label": " Enable Fixation", "value": "fixation"},
-                            ],
-                            value=["fixation"],
-                            id="fixation-options",
-                        ),
-                        dbc.Label("Velocity Threshold", className="my-2"),
-                        dbc.Input(id="fixation-velocity", type="number", value=1.5),
-                        dash.dcc.Checklist(
-                            options=[
-                                {"label": " Push to stream (tobii_gaze_fixation)", "value": "push_stream"},
-                                {"label": " Dont remove screen NaN (default: 0)", "value": "dont_screen_nans"},
-                                {"label": " Verbose", "value": "verbose"}
-                            ],
-                            value=["push_stream"],
-                            id="tracker-extra-options",
-                        )
-                    ]),
-                    dbc.Col([
-                        dbc.ButtonGroup([
-                            dbc.Button("Start - lsl Stream", color="success", outline=True, id="start_lsl_stream"),
-                            dbc.Button("Stop - lsl Stream", color="danger", outline=True, id="stop_lsl_stream")
-                        ], vertical=True),
-                    ], class_name="align-self-center", width="auto"),
-                ])
-            ])),
-            dbc.Row([
-                dbc.Col([
-                    dash.dcc.RadioItems(
-                        options=[
-                            {"label": " Mock", "value": "mock"},
-                            {"label": " Eye-Tracker", "value": "eye-tracker"}
-                        ],
-                        value='eye-tracker',
-                        id="validation-tracker-type",
-                    ),
-                    dbc.Button(
-                        "Validate Eye Tracker",
-                        color="secondary",
-                        outline=True,
-                        id="open-grid-window",
-                    )
-                ]),
-            ], class_name="mt-4")
-        ])
-    ]),
-    dbc.Spinner([
-        dash.dcc.Store(id="stream-store", data={"inlet": None, "message": "Not connected to stream"}),
-        dbc.Button("Fetch tobii_gaze_fixation Stream", color="secondary", outline=True, id="fetch_stream", class_name="my-2"),
-        dash.html.Div(id="stream-status")],
-        delay_show=100
-    ),
-    dbc.Tabs([
-        dbc.Tab(label="Gaze points", tab_id="eye-tracker-gaze"),
-        dbc.Tab(label="Fixation", tab_id="eye-tracker-fixation"),
-        dbc.Tab(label="Metrics", tab_id="eye-tracker-metrics")  
-    ],
-    id="tabs",
-    active_tab="eye-tracker-gaze",
-    class_name="mb-4"),
-    dash.html.Div(id="tab-content", className="p-4"),
-    dash.html.Footer([
-        dbc.Col([
-            dash.html.A(
-                    dash.html.I(className="bi bi-github"),
-                    href="https://github.com/VinayIN/EyeTrackerAnalyzer",
-                    target="_blank"
-                ),
-        ], class_name="float-end my-4"),
-    ])
-], fluid=True, class_name="p-4")
-
-@app.callback(
-    Output('open-grid-window', 'value'),
-    [Input('open-grid-window', 'n_clicks'),
-     Input('validation-tracker-type', 'value')]
-)
-def update_window(n_clicks, value):
-    if n_clicks:
-        tracker_params = {
-            'use_mock': value == "mock",
-            'fixation': False,
-            'verbose': False,
-            'push_stream': False,
-            'save_data': True,
-            'duration': (9*(2000+1000))/1000 + (2000*3)/1000 + 2000/1000
-        }
-        with multiprocessing.Pool(processes=2) as pool:
-            tobii_result = pool.apply_async(run_tracker, args=(tracker_params,))
-            validation_result = pool.apply_async(run_validation_window)
-            validation_result.get()
-            tobii_result.get()
-        LOGGER.info("validation window closed")
-        return 1
-    return 0
-
-def run_tracker(params):
-    try:
-        duration = params.get("duration")
-        tracker = Tracker(**params)
-        if duration is not None:
-            LOGGER.info(f"Total Duration: {duration}")
-        tracker.start_tracking(duration=duration)
-    except Exception as e:
-        LOGGER.error(f"Tracker error: {str(e)}")
-
-@app.callback(
-    Output("start_lsl_stream", "value"),
-    Output("process-error", "children"),
-    [
-        Input("start_lsl_stream", "n_clicks"),
-        Input("tracker-type", "value"),
-        Input("tracker-data-rate", "value"),
-        Input("fixation-options", "value"),
-        Input("fixation-velocity", "value"),
-        Input("tracker-extra-options", "value"),
-    ],
-    prevent_initial_call=True
-)
-def start_lsl_stream(n_clicks, tracker_type, data_rate, fixation, velocity, extra_options):
-    if not n_clicks:
-        return None, None
-        
-    try:
-        if process_manager.active_processes:
-            return None, dbc.Alert(
-                "Another tracking process is already running. Please stop it first.",
-                color="warning",
-                dismissable=True
-            )
-
-        tracker_params = {
-            'data_rate': data_rate or 600,
-            'use_mock': tracker_type == "mock",
-            'fixation': "fixation" in fixation,
-            'velocity_threshold': velocity,
-            'dont_screen_nans': "dont_screen_nans" in extra_options,
-            'verbose': "verbose" in extra_options,
-            'push_stream': "push_stream" in extra_options,
-            'save_data': False
-        }
-
-        ctx = multiprocessing.get_context('spawn')
-        process = ctx.Process(
-            target=run_tracker,
-            args=(tracker_params,),
-            daemon=True
-        )
-        
-        process.start()
-        time.sleep(1)
-        if not process.is_alive():
-            return None, dbc.Alert(
-                "Process failed to start.",
-                color="danger",
-                dismissable=True
-            )
-
-        process_manager.add_process(process.pid, process)
-        LOGGER.info(f"Started tracking process with PID {process.pid}")
-        
-        return process.pid, None
-    
-    except Exception as e:
-        error_msg = f"Failed to start tracking process: {str(e)}"
-        LOGGER.error(error_msg)
-        return None, dbc.Alert(error_msg, color="danger", dismissable=True)
-
-@app.callback(
-    Output("lsl-status", "children"),
-    [
-        Input("start_lsl_stream", "value"),
-        Input("stop_lsl_stream", "value"),
-        Input("status-interval", "n_intervals")
-    ]
-)
-def update_lsl_status(pid, stop_message, n_intervals):
-    if stop_message:
-        return dbc.Alert(f"{stop_message} (Refresh the page)", color="warning", dismissable=True)
-    if not pid:
-        return dbc.Alert("Not Running", color="warning", dismissable=True)
-    
-    try:        
-        # Get process info
-        process_info = process_manager.get_process_info(pid)
-        if not process_info:
-            return dbc.Alert("Process not found in manager", color="danger", dismissable=True)
-        
-        # Check process status using psutil
+    def stop_stream(self):
+        if not self.stream_thread or not self.stream_thread.isRunning():
+            qtw.QMessageBox.warning(self, "Warning", "No active stream to stop.")
+            return
         try:
-            process = psutil.Process(pid)
-            if not process.is_running():
-                return dbc.Alert("Process not running", color="danger", dismissable=True)
-            
-            if process.status() == psutil.STATUS_ZOMBIE:
-                return dbc.Alert("Process Zombie (Need restart)", color="danger", dismissable=True)
-            
-            # Get process metrics
-            memory_info = process.memory_info()
-            cpu_percent = process.cpu_percent()
-            storage_free = psutil.disk_usage(os.getcwd()).free / 1024**3
-            runtime = datetime.datetime.now() - process_info['start_time']
-            
-            return dbc.Alert(
-                [
-                    dash.html.Div([
-                        dash.html.Strong("Status: "), "Running",
-                        dash.html.Br(),
-                        dash.html.Strong("PID: "), str(pid),
-                        dash.html.Br(),
-                        dash.html.Strong("Runtime: "), f"{runtime.seconds}s",
-                        dash.html.Br(),
-                        dash.html.Strong("Memory: "), f"{memory_info.rss / 1024 / 1024:.1f} MB",
-                        dash.html.Br(),
-                        dash.html.Strong("Storage avail: "), f"{storage_free} GB",
-                        dash.html.Br(),
-                        dash.html.Strong("CPU: "), f"{cpu_percent:.1f}%"
-                    ])
-                ],
-                color="success",
-                dismissable=True
-            )
-            
-        except psutil.NoSuchProcess:
-            process_manager.remove_process(pid)
-            return dbc.Alert("Process terminated unexpectedly", color="danger", dismissable=True)
-            
-    except Exception as e:
-        LOGGER.error(f"Error monitoring process: {str(e)}")
-        return dbc.Alert(f"Monitoring error: {str(e)}", color="danger", dismissable=True)
+            self.stream_thread.stop()
 
-@app.callback(
-    Output("stop_lsl_stream", "value"),
-    [Input("stop_lsl_stream", "n_clicks"), Input("start_lsl_stream", "value")],
-    allow_duplicate=True
-)
-def stop_lsl_stream(n_clicks, pid):
-    if not (n_clicks and pid):
-        return 0
+            self.stream_thread = None
+            self.stream_pid = None
+            self.statusBar().showMessage("Stream stopped successfully", 3000)
+        except Exception as e:
+            LOGGER.error(f"Error stopping stream: {str(e)}")
+            self.statusBar().showMessage(f"Error stopping stream: {str(e)}", 5000)
+
+    def update_gaze_plot(self, times, x, y):
+        self.curve_x.setData(times, x)
+        self.curve_y.setData(times, y)
+
+    def update_fixation_plot(self, x_coords, y_coords, counts):
+        self.fixation_plot.clear()
+        self.fixation_plot.plot(x_coords, y_coords, pen=None, symbol='o', symbolSize=counts, symbolBrush=(255, 0, 0, 150))
+
+    def update_metrics_table(self):
+        self.df = eta_validate.get_statistics(
+            gaze_file=self.gaze_data_items[self.gaze_data.currentIndex() - 1],
+            validate_file=self.validate_data_items[self.validate_data.currentIndex() - 1])
+        self.metrics_table.setRowCount(self.df.shape[0])
+        self.metrics_table.setColumnCount(self.df.shape[1])
+        self.metrics_table.setHorizontalHeaderLabels(self.df.columns)
+
+        for row in range(self.df.shape[0]):
+            for col in range(self.df.shape[1]):
+                item = qtw.QTableWidgetItem(str(self.df.iloc[row, col]))
+                item.setTextAlignment(qtc.Qt.AlignmentFlag.AlignCenter)
+                self.metrics_table.setItem(row, col, item)
         
-    try:
-        process = psutil.Process(pid)
-    
-        process.terminate()
-        try:
-            process.wait(timeout=3)
-        except psutil.TimeoutExpired:
-            LOGGER.warning(f"Process {pid} did not terminate within timeout, forcing kill")
-            process_manager.cleanup()
-            return f"Process {pid} did not terminate within timeout, forcing kill"
-            
-        process_manager.remove_process(pid)
-        LOGGER.info(f"Process with PID {pid} stopped successfully")
-        return f"Stopped successfully PID: {pid}"
+        self.metrics_table.setAlternatingRowColors(True)
+        self.metrics_table.resizeColumnsToContents()
+        self.statusBar().showMessage("Metrics generated successfully", 5000)
+
+    def download_csv(self):
+        if self.df.empty:
+            qtw.QMessageBox.critical(self, "Error", "No data to save as CSV")
+            return
         
-    except psutil.NoSuchProcess:
-        LOGGER.info(f"Process with PID {pid} not found")
-        process_manager.remove_process(pid)
-        return f"PID: {pid} not found"
-    except Exception as e:
-        error_msg = f"Error stopping process {pid}: {str(e)}"
-        LOGGER.error(error_msg)
-        return error_msg
+        filename, _ = qtw.QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
+        if filename:
+            self.df.to_csv(filename, index=False)
 
-@app.callback(
-    Output("tab-content", "children"),
-    [Input("tabs", "active_tab")],
-)
-def render_tab_content(active_tab):
-    if active_tab == "eye-tracker-gaze":
-        LOGGER.info("plotting gaze points")
-        return render_tab(tab_type="gaze")
-    elif active_tab == "eye-tracker-fixation":
-        LOGGER.info("plotting fixation points")
-        return render_tab(tab_type="fixation")
-    elif active_tab == "eye-tracker-metrics":
-        LOGGER.info("plotting metrics")
-        return render_metrics_tab()
-    return "No tab selected"
-
-def render_tab(tab_type):
-    return dbc.Card(dbc.CardBody(
-        dbc.Row(
-            [
-                dash.html.H3(f"Live Visualization: {tab_type.capitalize()} points", className="mb-3"),
-                dash.html.Hr(),
-                dbc.Col(
-                    dbc.Button("Refresh", color="warning", outline=True, id="refresh", class_name="bi bi-arrow-clockwise"),
-                    width="auto",
-                    class_name="mb-3"
-                ),
-                dash.html.Div(id=f'live-graph-{tab_type}'),
-                dash.dcc.Interval(id=f'graph-update-{tab_type}', interval=300, n_intervals=0),
-            ]
-        )
-    ))
-
-@app.callback(
-    Output('refresh', 'n_clicks'),
-    [Input('refresh', 'n_clicks')],
-    prevent_initial_call=True
-)
-def clear_data(n_clicks):
-    if n_clicks:
-        LOGGER.info("Refresh button clicked")
-        var.refresh_gaze()
-        var.reader.clear_data()
-    return n_clicks
-
-def get_available_stream():
-    message = "No fetching performed"
-    try:
-        LOGGER.info("Fetching stream")
-        streams = pylsl.resolve_streams(wait_time=1)
-        inlet = pylsl.StreamInlet(streams[0])
-        message = f"Connected to stream: {inlet.info().name()}"
-        expected_name = "tobii_gaze_fixation"
-        if inlet.info().name() == expected_name:
-            return inlet, message
-        message = f"Invalid stream name. Expected: {expected_name}"
-        return None, message
-    except Exception as e:
-        message = f"No stream found. Error: {e}"
-    return None, message
-
-@app.callback(
-    Output("stream-store", "data"),
-    [Input("fetch_stream", "n_clicks")],
-    prevent_initial_call=True,
-)
-def get_inlet(n_clicks):
-    if n_clicks:
-        if var.inlet is None:
-            var.inlet, message = get_available_stream()
-            name = var.inlet.info().name() if var.inlet else None
-            if var.inlet:
-                var.start_stream_thread()
-            LOGGER.info(message)
-        else:
-            name = var.inlet.info().name()
-            message = "Already connected to stream"
-        return {"inlet": name, "message": message}
-    return {"inlet": None, "message": "Not connected to stream"}
-
-@app.callback(
-    Output("stream-status", "children"),
-    [Input("stream-store", "data")]
-)
-def update_stream_status(data):
-    inlet_name = data["inlet"]
-    message = data["message"]
-    if inlet_name is not None:
-        return dbc.Alert(f"Success ({message})", color="success", dismissable=True)
-    return dbc.Alert(f"Failed ({message})", color="danger", dismissable=True)
-
-
-@app.callback(
-    Output('live-graph-gaze', 'children'),
-    [   
-        Input('graph-update-gaze', 'n_intervals'),
-        Input("stream-store", "data")
-    ],
-)
-def update_graph_gaze(n_intervals, data):
-    """
-    Updates the gaze graph with data retrieved from the GazeGraphUpdater.
-    """
-    if data["inlet"] is not None:
-        times, x, y = var.reader.get_data()
-
-        fig = go.Figure(skip_invalid=True)
-        if times:
-            fig.add_trace(go.Scatter(x=list(times), y=list(x), mode='lines', name='Gaze X'))
-            fig.add_trace(go.Scatter(x=list(times), y=list(y), mode='lines', name='Gaze Y'))
-
-            fig.update_layout(
-                title='Eye Gaze Data Over Time',
-                xaxis=dict(title='Timestamp', range=[min(times), max(times)], type='date'),
-                yaxis=dict(title='Gaze Position', range=[0, max(max(x, default=0), max(y, default=0))]),
-                showlegend=True
-            )
-        return dbc.Card(dbc.CardBody(dash.dcc.Graph(figure=fig)))
-
-    return dbc.Alert("Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze_fixation stream`?",
-                     color="danger", dismissable=True)
-
-@app.callback(
-    Output('live-graph-fixation', 'children'),
-    [
-        Input('graph-update-fixation', 'n_intervals'),
-        Input("stream-store", "data")
-    ],
-)
-def update_graph_fixation(n_intervals, data):
-    """
-    Updates the fixation graph with data retrieved from the GazeReader.
-    Shows fixation points with bubble sizes proportional to fixation duration.
-    """
-    if data["inlet"] is not None:
-        fixation_points = var.reader.get_data(fixation=True)
-        
-        fig = go.Figure(skip_invalid=True)
-        if fixation_points:
-            x_coords, y_coords, counts = zip(*fixation_points)
-            normalized_sizes = [count for count in counts]
-            
-            fig.add_trace(go.Scatter(
-                x=x_coords,
-                y=y_coords,
-                mode='markers',
-                marker=dict(
-                    size=normalized_sizes,
-                    sizemode='diameter',
-                    sizeref=2,
-                    color='rgba(255, 0, 0, 0.6)',
-                    line=dict(color='red', width=1)
-                ),
-                name='Gaze point'
-            ))
-
-            fig.update_layout(
-                title='Eye Fixation Tracker',
-                xaxis=dict(title='Screen Width', range=[0, var.width]),
-                yaxis=dict(title='Screen Height', range=[var.height, 0]),
-                showlegend=True,
-                plot_bgcolor='white'
-            )
-            
-            return dbc.Card(dbc.CardBody(dash.dcc.Graph(figure=fig)))
-
-    return dbc.Alert(
-        "Did you start `lsl stream`? or clicked the button `Fetch tobii_gaze_fixation stream`?",
-        color="danger", dismissable=True
-    )
-
-def render_metrics_tab():
-    gaze_files = eta_utils.get_file_names("gaze_data_")
-    validation_files = eta_utils.get_file_names("system_")
-
-    return dbc.Card(
-        dbc.CardBody(
-            dbc.Row([
-                dash.html.H3("Statistics: Eye Tracker Validation", className="mb-3"),
-                dash.dcc.Markdown(
-                    f'''
-                    Searching Data files at path: `{__datapath__}`
-                    '''
-                ),
-                dbc.Row([
-                    dbc.Col(dash.dcc.Dropdown(
-                        id='gaze-data-dropdown',
-                        options=[{'label': pathlib.Path(f).name, 'value': f} for f in gaze_files],
-                        placeholder="Select Gaze Data File"
-                    )),
-                    dbc.Col(dash.dcc.Dropdown(
-                        id='validation-data-dropdown',
-                        options=[{'label': pathlib.Path(f).name, 'value': f} for f in validation_files],
-                        placeholder="Select Validation File"
-                    )),
-                ]),
-                dash.html.Div(id='dropdown-output', className="my-2"),
-                dbc.Button("Analyze", color="success", outline=True, id="analyze-button", class_name="mb-2"),
-                dash.html.Hr(),
-                dash.html.Div(id='graph-output')
-            ])
-        )
-    )
-
-@app.callback(
-    Output('download-metrics-csv', 'data'),
-    Input('download-metrics-btn', 'n_clicks'),
-    prevent_initial_call=True
-)
-def download_data(n_clicks):
-    if n_clicks > 0:
-        return dash.dcc.send_data_frame(var.metrics_df.to_csv, f"validation_metrics_{eta_utils.get_timestamp()}.csv")
-
-@app.callback(
-    Output('dropdown-output', 'children'),
-    [Input('gaze-data-dropdown', 'value'), Input('validation-data-dropdown', 'value')]
-)
-def update_dropdown(gaze_data, validation_data):
-    ts_gaze_data = "-"
-    info_validation_data = "-"
-    if gaze_data:
-        ts_gaze_data = re.search(r"gaze_data_(.*).json", gaze_data).group(1)
-        ts_gaze_data = datetime.datetime.strptime(ts_gaze_data, "%Y%m%d_%H%M%S")
-    if validation_data:
-        info = re.search(r"system_(.*).json", validation_data).group(1)
-        info = info.split("_")
-        ts_validation_data = datetime.datetime.strptime("_".join(info[-2:]), "%Y%m%d_%H%M%S")
-        info_validation_data = " | ".join(info[:-2]) + f" | {ts_validation_data}"
-    return dbc.Row(
-        [
-        dbc.Col(dash.html.I(f"Selected Gaze Data Timestamp: {ts_gaze_data}")),
-        dbc.Col(dash.html.I(f"Selected System Information: {info_validation_data}"))
-        ]
-    )
-
-@app.callback(
-    Output('graph-output', 'children'),
-    [Input('analyze-button', 'n_clicks'),
-     Input('gaze-data-dropdown', 'value'),
-     Input('validation-data-dropdown', 'value')]
-)
-def update_graph_metrics(n_clicks, gaze_data, validation_data):
-    if n_clicks and gaze_data and validation_data:
-        var.metrics_df = eta_validate.get_statistics(gaze_data, validation_data).astype(str)
-        content = dbc.Alert(
-            "No data available for the selected files",
-            color="danger", dismissable=True)
-        if not var.metrics_df.empty:
-            content = [
-                    dash.dash_table.DataTable(
-                        data = var.metrics_df.to_dict('records'),
-                        id='metrics-table',
-                        style_table={'width': '100%', 'overflowX': 'auto'},
-                        style_cell={'textAlign': 'center', 'minWidth': '120px', 'whiteSpace': 'normal'},
-                        style_header={'fontWeight': 'bold'},
-                    ),
-                    dbc.Button("Download", id="download-metrics-btn", color="success", outline=True, class_name="my-2"),
-                    dash.dcc.Download(id="download-metrics-csv")
-                ]
-        return dbc.Card(
-            dbc.CardBody(content, class_name="table-responsive"),
-            class_name="mt-3"
-        )
-    return dbc.Alert(
-                "Choose appropriate files combination to analyze the eye tracker data",
-                color="info", dismissable=True)
-
+    def closeEvent(self, event):
+        self.system_info_timer.stop()
+        event.accept()
 
 @click.command(name="application")
-@click.option('--debug', type=bool, is_flag=True, help="debug mode")
-@click.option('--port', type=int, default=8050, help="port number")
-def main(debug: bool, port: int):
-    def cleanup():
-        var.stop_stream_thread()
-        process_manager.cleanup()
-    
-    atexit.register(cleanup)
-    
-    try:
-        app.run(debug=debug, port=port)
-    finally:
-        cleanup()
+def main():
+    app = qtw.QApplication(sys.argv)
+    window = EyeTrackerAnalyzer()
+    window.show()
+    sys.exit(app.exec())
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

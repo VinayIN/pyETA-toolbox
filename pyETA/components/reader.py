@@ -1,5 +1,6 @@
 import datetime
 from collections import defaultdict
+from pyETA import LOGGER
 
 class GazeReader:
     def __init__(self):
@@ -19,8 +20,9 @@ class GazeReader:
             if sample is not None:
                 current_time = datetime.datetime.fromtimestamp(sample[-2])
                 screen_width, screen_height = sample[-4], sample[-3]
-                gaze_x = int(sample[0] * screen_width)
-                gaze_y = int(sample[1] * screen_height)
+                # Get the filtered gaze data
+                gaze_x = int((sample[7] if sample[7] else sample[16]) * screen_width)
+                gaze_y = int((sample[8] if sample[8] else sample[17]) * screen_height)
                 
                 # Store regular gaze data
                 self.buffer_times.append(current_time)
@@ -28,10 +30,10 @@ class GazeReader:
                 self.buffer_y.append(gaze_y)
                 
                 # Process fixation data
-                is_fixation = sample[3] or sample[11]  # Check both eyes' fixation flags
+                is_fixation = sample[3] or sample[12]
                 if is_fixation:
-                    fixation_time = sample[5] if sample[3] else sample[13]  # Get corresponding timestamp
-                    key = f"{gaze_x}_{gaze_y}"
+                    fixation_time = sample[5] if sample[5] else sample[14]
+                    key = f"{fixation_time}"
                     self.fixation_data[key]['count'] += 1
                     self.fixation_data[key]['x'] = gaze_x
                     self.fixation_data[key]['y'] = gaze_y

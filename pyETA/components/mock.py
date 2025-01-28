@@ -4,7 +4,7 @@ import argparse
 import time
 from threading import Thread
 from pynput import mouse
-import pyETA.components.utils as eta_utils
+from pyETA.components import utils
 
 EYETRACKER_GAZE_DATA = 'mock_gaze_data'
 CAPABILITY_HAS_GAZE_DATA = 'mock_has_gaze_data'
@@ -18,7 +18,7 @@ class MockEyeTracker(Thread):
         self.verbose = verbose
         self.data_rate = data_rate
         self.listener = None
-        self.screen_width, self.screen_height = eta_utils.get_current_screen_size()
+        self.screen_width, self.screen_height = utils.get_current_screen_size()
         self.address ="ZA03046BINAY2024"
         self.model = "ZA03046BINAY2024"
         self.device_name = "Mock Tracker"
@@ -67,8 +67,8 @@ class MockEyeTracker(Thread):
                 if EYETRACKER_GAZE_DATA in self.callbacks:
                     self.callbacks[EYETRACKER_GAZE_DATA](
                         {
-                            "device_time_stamp": eta_utils.get_timestamp(),
-                            "system_time_stamp": eta_utils.get_timestamp(),
+                            "device_time_stamp": utils.get_timestamp(),
+                            "system_time_stamp": utils.get_timestamp(),
                             'left_gaze_point_on_display_area': [x, y],
                             'left_gaze_point_validity': random.uniform(0, 1) > 0.5,
                             'right_gaze_point_on_display_area': [x, y],

@@ -5,6 +5,7 @@ import sys
 import random
 import datetime
 import json
+import threading
 import os
 import click
 from typing import Union, Optional
@@ -13,7 +14,6 @@ from pyETA.components.track import Tracker
 import pyETA.components.utils as eta_utils
 
 
-# TrackerThread class
 class TrackerThread(qtc.QThread):
     finished_signal = qtc.pyqtSignal(str)
     error_signal = qtc.pyqtSignal(str)
@@ -23,30 +23,33 @@ class TrackerThread(qtc.QThread):
         self.tracker_params = tracker_params
         self.tracker = None
         self.running = False
+        self.id = None
 
     def run(self):
         try:
             self.running = True
+            self.id = threading.get_native_id()
             LOGGER.info("Starting tracker thread...")
             self.tracker = Tracker(**self.tracker_params)
             self.tracker.start_tracking(duration=self.tracker_params['duration'])
-            if self.running:
-                self.finished_signal.emit("Tracking completed successfully")
+            self.finished_signal.emit("Tracking completed successfully")
+        except KeyboardInterrupt:
+            LOGGER.info("KeyboardInterrupt!")
         except Exception as e:
             error_msg = f"Tracker error: {str(e)}"
             LOGGER.error(error_msg)
             self.error_signal.emit(error_msg)
         finally:
-            self.running = False
+            self.stop()
 
     def stop(self):
         self.running = False
-        if self.tracker:
+        self.id = None
+        if 'duration' not in self.tracker_params:
             self.tracker.stop_tracking()
         self.quit()
         self.wait()
 
-# ValidationWindow class (unchanged)
 class ValidationWindow(qtw.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -61,10 +64,9 @@ class ValidationWindow(qtw.QMainWindow):
 
     def initUI(self):
         self.setWindowTitle('Validation Window')
-        self.showFullScreen()
+        #self.showFullScreen()
         self.screen_width, self.screen_height = self.size().width(), self.size().height()
-        print("Screen width:", self.screen_width)
-        print("Screen height:", self.screen_height)
+        LOGGER.info(f"Screen width x height: {self.screen_width} x {self.screen_height}")
         self.gridWidget = qtw.QWidget(self)
         self.setCentralWidget(self.gridWidget)
 
@@ -120,9 +122,10 @@ class ValidationWindow(qtw.QMainWindow):
         qtc.QTimer.singleShot(self.stay_duration, self.start_sequence)
 
     def keyPressEvent(self, event: qtg.QKeyEvent):
-        if event.key() == qtc.Qt.Key.Key_F11:
+        if event.key() == qtc.Qt.Key.Key_F11 or event.key() == qtc.Qt.Key.Key_F:
             self.showNormal() if self.isFullScreen() else self.showFullScreen()
             self.screen_width, self.screen_height = self.size().width(), self.size().height()
+            LOGGER.info(f"Screen width x height: {self.screen_width} x {self.screen_height}")
         elif event.key() == qtc.Qt.Key.Key_Escape or event.key() == qtc.Qt.Key.Key_Q:
             LOGGER.info("Validation Window closed manually!")
             self.close()
@@ -156,32 +159,38 @@ class ValidationWindow(qtw.QMainWindow):
                 }, f, indent=4)
             LOGGER.info(f"Validation Data saved: {file}!")
 
-def run_validation_window(screen: Optional[qtg.QScreen]=None):
+def run_validation_window(screen_index: Optional[int] = 0):
     validation_window = ValidationWindow()
+    screens = qtw.QApplication.screens()
 
-    if screen:
+    if screen_index < len(screens):
+        screen = screens[screen_index]
         geometry = screen.geometry()
         validation_window.setGeometry(geometry)
-        LOGGER.info(f"Validation Window created on screen resolution: {geometry.width()}x{geometry.height()}")
-
+        validation_window.move(geometry.topLeft())
+        LOGGER.info(f"Validation Window created on screen {screen_index + 1} with resolution: {geometry.width()}x{geometry.height()}")
+    else:
+        raise ValueError(f"Invalid screen index: {screen_index}")
     return validation_window
 
 @click.command(name="window")
 @click.option("--use_mock", is_flag=True, help="Use mockup tracker")
+@click.option("--screen_index", default=0, help="Screen index to display the validation window")
 @click.option("--verbose", is_flag=True, help="Enable verbose logging")
-def main(use_mock, verbose):
+def main(use_mock, screen_index, verbose):
     app = qtw.QApplication(sys.argv)
-    validation_window = run_validation_window()
+    validation_window = run_validation_window(screen_index=screen_index)
     tracker_params = {
         'use_mock': use_mock,
         'fixation': False,
         'verbose': verbose,
         'push_stream': False,
         'save_data': True,
+        'screen_index': screen_index,
         'duration': (9*(2000+1000))/1000 + (2000*3)/1000 + 2000/1000
     }
 
-    # Start the tracker thread
+
     tracker_thread = TrackerThread(tracker_params)
     tracker_thread.finished_signal.connect(lambda msg: LOGGER.info(msg))
     tracker_thread.error_signal.connect(lambda msg: LOGGER.error(msg))
