@@ -10,45 +10,8 @@ import os
 import click
 from typing import Union, Optional
 from pyETA import __datapath__, LOGGER
-from pyETA.components.track import Tracker
 import pyETA.components.utils as eta_utils
-
-
-class TrackerThread(qtc.QThread):
-    finished_signal = qtc.pyqtSignal(str)
-    error_signal = qtc.pyqtSignal(str)
-
-    def __init__(self, tracker_params):
-        super().__init__()
-        self.tracker_params = tracker_params
-        self.tracker = None
-        self.running = False
-        self.id = None
-
-    def run(self):
-        try:
-            self.running = True
-            self.id = threading.get_native_id()
-            LOGGER.info("Starting tracker thread...")
-            self.tracker = Tracker(**self.tracker_params)
-            self.tracker.start_tracking(duration=self.tracker_params['duration'])
-            self.finished_signal.emit("Tracking completed successfully")
-        except KeyboardInterrupt:
-            LOGGER.info("KeyboardInterrupt!")
-        except Exception as e:
-            error_msg = f"Tracker error: {str(e)}"
-            LOGGER.error(error_msg)
-            self.error_signal.emit(error_msg)
-        finally:
-            self.stop()
-
-    def stop(self):
-        self.running = False
-        self.id = None
-        if 'duration' not in self.tracker_params:
-            self.tracker.stop_tracking()
-        self.quit()
-        self.wait()
+from pyETA.components.reader import TrackerThread
 
 class ValidationWindow(qtw.QMainWindow):
     def __init__(self):

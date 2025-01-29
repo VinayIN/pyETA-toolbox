@@ -5,6 +5,7 @@ import psutil
 import os
 import datetime
 import threading
+import pylsl
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
@@ -15,9 +16,8 @@ import PyQt6.QtGui as qtg
 from typing import Optional
 
 from pyETA import __version__, LOGGER, __datapath__
-from pyETA.components.track import Tracker
-from pyETA.components.window import TrackerThread
-from pyETA.components.reader import StreamThread
+
+from pyETA.components.reader import StreamThread, TrackerThread
 import pyETA.components.utils as eta_utils
 import pyETA.components.validate as eta_validate
 
@@ -342,14 +342,21 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
 
         # Gaze X Plot
         self.gaze_plot_x = pg.PlotWidget(title="Gaze X Position")
+        self.gaze_plot_x.setLabel('bottom', 'Time (s)')
+        self.gaze_plot_x.setLabel('left', 'X Position')
         self.curve_x = self.gaze_plot_x.plot(pen='r')
         layout.addWidget(self.gaze_plot_x)
 
         # Gaze Y Plot
         self.gaze_plot_y = pg.PlotWidget(title="Gaze Y Position")
+        self.gaze_plot_y.setLabel('bottom', 'Time (s)')
+        self.gaze_plot_y.setLabel('left', 'Y Position')
         self.curve_y = self.gaze_plot_y.plot(pen='b')
         layout.addWidget(self.gaze_plot_y)
 
+        # Initialize reference time
+        self.reference_time = None
+        
         return tab
 
     def create_fixation_tab(self):
@@ -359,8 +366,16 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.fixation_plot = pg.PlotWidget(title="Fixation Points")
         self.fixation_plot.setXRange(0, self.size().width())
         self.fixation_plot.setYRange(0, self.size().height())
+        
         layout.addWidget(self.fixation_plot)
-
+        
+        # Store current fixation data
+        self.current_fixations = {
+            'x_coords': [],
+            'y_coords': [],
+            'counts': []
+        }
+        
         return tab
     
     def get_gaze_and_validate_data(self):
@@ -412,6 +427,10 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         if self.stream_thread and self.stream_thread.isRunning():
             qtw.QMessageBox.warning(self, "Warning", "Stream is already running.")
             return
+        if self.validate_tracker_thread and self.validate_tracker_thread.isRunning():
+            qtw.QMessageBox.warning(self, "Warning", "Validation Tracker is running. Please stop the stream.")
+            return
+        
         tracker_params = {
             'data_rate': self.data_rate_slider.value(),
             'use_mock': self.stream_type_combo.currentText(),
@@ -423,12 +442,32 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             'save_data': False,
             }
         try:
-            self.stream_thread = StreamThread()
-            self.stream_thread.update_gaze_signal.connect(self.update_gaze_plot)
-            self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
-            self.stream_thread.start()
-            self.statusBar().showMessage("Stream started successfully", 3000)
+            self.validate_tracker_thread = TrackerThread(tracker_params)
+            self.validate_tracker_thread.finished_signal.connect(
+                lambda msg: qtw.QMessageBox.information(self, "Tracking Thread", msg)
+            )
+            self.validate_tracker_thread.error_signal.connect(
+                lambda msg: qtw.QMessageBox.critical(self, "Tracking Thread", msg)
+            )
+            self.validate_tracker_thread.start()
+            #qtc.QThread.msleep(1000)
+            self.statusBar().showMessage("Validation tracker started", 5000)
+            LOGGER.info("Fetching stream")
+            streams = pylsl.resolve_streams(wait_time=1)
+            inlet = pylsl.StreamInlet(streams[0])
+            message = f"Connected to stream: {inlet.info().name()}"
+            expected_name = "tobii_gaze_fixation"
+            if inlet.info().name() == expected_name:
+                qtw.QMessageBox.information(self, "Stream", message)
+                self.stream_thread = StreamThread(inlet=inlet)
+                self.stream_thread.update_gaze_signal.connect(self.update_gaze_plot)
+                self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
+                self.stream_thread.start()
+                self.statusBar().showMessage("Stream started successfully", 3000)
         except Exception as e:
+            if self.validate_tracker_thread and self.validate_tracker_thread.isRunning():
+                self.validate_tracker_thread.stop()
+                self.validate_tracker_thread = None
             error_msg = f"Failed to start stream: {str(e)}"
             self.statusBar().showMessage(error_msg, 5000)
             LOGGER.error(error_msg)
@@ -437,6 +476,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         if not self.stream_thread or not self.stream_thread.isRunning():
             qtw.QMessageBox.warning(self, "Warning", "No active stream to stop.")
             return
+        
         try:
             self.stream_thread.stop()
             self.stream_thread = None
@@ -445,16 +485,55 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             LOGGER.error(f"Error stopping stream: {str(e)}")
             self.statusBar().showMessage(f"Error stopping stream: {str(e)}", 5000)
 
+        try:
+            self.validate_tracker_thread.stop()
+            self.validate_tracker_thread = None
+            self.statusBar().showMessage("Validation tracker stopped successfully", 3000)
+        except Exception as e:
+            LOGGER.error(f"Error stopping validation tracker: {str(e)}")
+            self.statusBar().showMessage(f"Error stopping validation tracker: {str(e)}", 5000)
+
     def update_gaze_plot(self, times, x, y):
-        self.curve_x.setData(times, x)
-        self.curve_y.setData(times, y)
-        if times:
-            self.gaze_plot_x.setXRange(min(times), max(times))
-            self.gaze_plot_y.setYRange(min(min(x), min(y)), max(max(x), max(y)))
+        try:
+            if not times or not x or not y:
+                return
+
+            # Convert datetime objects to timestamps (seconds)
+            if self.reference_time is None:
+                self.reference_time = times[0]
+
+            time_points = [(t - self.reference_time).total_seconds() for t in times]
+
+            # Update the plots
+            self.curve_x.setData(time_points, x)
+            self.curve_y.setData(time_points, y)
+
+            # Auto-range if we have data
+            if time_points:
+                self.gaze_plot_x.setXRange(min(time_points), max(time_points))
+                self.gaze_plot_y.setXRange(min(time_points), max(time_points))
+                
+                # Set Y ranges with some padding
+                x_min, x_max = min(x), max(x)
+                y_min, y_max = min(y), max(y)
+                padding = (x_max - x_min) * 0.1  # 10% padding
+                
+                self.gaze_plot_x.setYRange(x_min - padding, x_max + padding)
+                self.gaze_plot_y.setYRange(y_min - padding, y_max + padding)
+
+        except Exception as e:
+            LOGGER.error(f"Error updating gaze plot: {str(e)}")
 
     def update_fixation_plot(self, x_coords, y_coords, counts):
         self.fixation_plot.clear()
-        self.fixation_plot.plot(x_coords, y_coords, pen=None, symbol='o', symbolSize=counts, symbolBrush=(255, 0, 0, 150))
+        scatter = pg.ScatterPlotItem(
+            x=x_coords, 
+            y=y_coords, 
+            size=counts,
+            symbol='o',
+            symbolBrush=(255, 0, 0, 150)
+        )
+        self.fixation_plot.addItem(scatter)
 
     def update_metrics_table(self):
         self.df = eta_validate.get_statistics(
