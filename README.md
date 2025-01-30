@@ -1,5 +1,5 @@
 # IMPORTANT
-In case of this toolbox doesn't works as intended or you find some issues, create an issue in the tracker (https://github.com/VinayIN/EyeTrackerAnalyzer/issues) and I will resolve it for you.
+In case, this toolbox doesn't works as intended or you find some issues, create an issue in the tracker (https://github.com/VinayIN/EyeTrackerAnalyzer/issues) and I will try to resolve it. (Please attach errors & log)
 
 # EyeTrackerAnalyzer
 - This provides a real-time eyetracking metric (especially fixation & Saccades).
