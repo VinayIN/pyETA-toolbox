@@ -154,7 +154,8 @@ def main(use_mock, screen_index, verbose):
     }
 
 
-    tracker_thread = TrackerThread(tracker_params)
+    tracker_thread = TrackerThread()
+    tracker_thread.set_variables(tracker_params)
     tracker_thread.finished_signal.connect(lambda msg: LOGGER.info(msg))
     tracker_thread.error_signal.connect(lambda msg: LOGGER.error(msg))
     tracker_thread.start()

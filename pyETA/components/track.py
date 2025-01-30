@@ -5,6 +5,7 @@ import os
 import json
 import time
 import click
+import threading
 
 from typing import Optional
 from mne_lsl import lsl
@@ -58,6 +59,8 @@ class Tracker:
         self.gaze_data = []
         self.gaze_id = None
         self.lsl_gaze_outlet = None
+        self.break_flag = False
+        self.id = None
         
         try:
             if self.use_mock:
@@ -134,7 +137,7 @@ class Tracker:
             debug.set_channel_units(ch_units)
             self.lsl_gaze_outlet = lsl.StreamOutlet(debug)
             LOGGER.info(f"LSL Stream Info: {self.lsl_gaze_outlet.get_sinfo()}")
-        LOGGER.info(f"Member Variables: {vars(self)}")
+        LOGGER.debug(f"Member Variables: {vars(self)}")
         print("Press Ctrl+C to stop tracking...")
     
     def create_filter(self, min_cutoff, beta, elements: list):
@@ -282,12 +285,14 @@ class Tracker:
         
         LOGGER.debug(f"Tracking for {duration} seconds...") if duration else LOGGER.debug("Tracking continuously...")
         if self.eyetracker:
+            self.id = threading.get_native_id()
             try:
                 LOGGER.debug("Starting tracking...")
                 self.eyetracker.subscribe_to(self.gaze_id, self._collect_gaze_data, as_dictionary=True)
                 while True:
-                    if end_time and datetime.datetime.now() >= end_time:
+                    if end_time and datetime.datetime.now() >= end_time or self.break_flag:
                         self.stop_tracking()
+                        LOGGER.info("Tracking stopped from loop!")
                         break
                     time.sleep(1)
             except KeyboardInterrupt:
@@ -306,8 +311,12 @@ class Tracker:
                     LOGGER.info(f"Gaze Data saved: {file}!")
         else:
             LOGGER.debug("No eye tracker found!")
+    
+    def signal_break(self):
+        self.break_flag = True
 
     def stop_tracking(self):
+        self.id = None
         try:
             if self.eyetracker:
                 LOGGER.info("Stopping tracking...")
@@ -316,6 +325,7 @@ class Tracker:
                 LOGGER.info("No eye tracker found!")
         except Exception as e:
             LOGGER.debug(f"Error stopping tracking: {e}")
+        return True
 
 
 @click.command(name="track")
