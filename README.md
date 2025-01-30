@@ -44,7 +44,7 @@ pip install pyeta-<version>-py3-none-any.whl
 ```
 
 ## Usage
-There are 2 ways this tool can be used (CLI & GUI), both are showed below:
+There are 2 ways this tool can be used (CLI - `track/window/validate` & GUI - `browser/application`), both are showed below:
 
 *prerequisite: `pyETA needs to be installed`*
 
@@ -59,20 +59,48 @@ pyETA track
 - `--use_mock:` Uses a mock service for the eye tracker.
 - `--fixation:` Adds fixation duration to the data stream.
 - `--velocity:` Specifies the velocity threshold for fixation.
-- `--dont_screen_nans:` Avoids correcting for NaNs.
+- `--accept_screen_nans:` Avoids correcting for NaNs.
 - `--save_data:` Saves the data to a file.
 - `--verbose:` Displays debug statements.
 - `--duration:` Specifies the duration for which to track the data.
+- `--screen_index:` for multi-screen execution, use the index to capture the data from a specific screen with the resolution
 
 An example with tracker running with fixation and a mock service that runs for a duration of 10sec and stops (if --use_mock is not provided, it searches for the eye tracker)
 ```bash
 pyETA track --fixation --use_mock --duration 10
 ```
+------
+##### Command:
+```bash
+pyETA window
+```
+#### Parameters:
+- `--use_mock:` Use mockup tracker
+- `--screen_index:` Screen index to display the validation window
+- `--verbose:` Enable verbose logging
+
+Example with parameters to run the validation window
+```bash
+    pyETA window --use_mock --screen_index=0 
+```
+_____
+##### Command:
+```bash
+pyETA validate
+```
+#### Parameters:
+- `--csv:` Name of the output CSV file. (example: myfile.csv)
+
+Example with parameters to fetch the metrics
+```bash
+    pyETA validate --csv=myfile.csv
+```
+_____
 
 #### 2. GUI
 ##### Command:
 ```bash
-pyETA application
+pyETA browser
 ```
 ##### Parameters:
 - `--debug:` Enables debug mode.
@@ -80,5 +108,10 @@ pyETA application
 
 Example with debug mode and starting at port 8050 (Access it here: http://localhost:8050)
 ```bash
-    pyETA application --debug --port 8050
+    pyETA browser --debug --port 8050
+```
+-------
+##### Command:
+```bash
+pyETA application
 ```
