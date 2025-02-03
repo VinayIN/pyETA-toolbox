@@ -58,7 +58,7 @@ class ValidationWindow(qtw.QMainWindow):
             self.circle.hide()
             self.process_data()
             LOGGER.info("Sequence completed!")
-            qtc.QTimer.singleShot(self.stay_duration, self.close)
+            qtc.QTimer.singleShot(self.stay_duration*3, self.close)
 
     def move_to_next_position(self):
         if not self.circle_positions:
@@ -128,7 +128,7 @@ def run_validation_window(screen_index: Optional[int] = 0):
 
     if screen_index < len(screens):
         screen = screens[screen_index]
-        geometry = screen.geometry()
+        geometry = screen.availableGeometry()
         validation_window.setGeometry(geometry)
         validation_window.move(geometry.topLeft())
         LOGGER.info(f"Validation Window created on screen {screen_index + 1} with resolution: {geometry.width()}x{geometry.height()}")

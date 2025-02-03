@@ -583,6 +583,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.fixation_plot.addItem(scatter)
 
     def update_metrics_table(self):
+        self.statusBar().showMessage("Calculating", 2000)
         self.df = eta_validate.get_statistics(
             gaze_file=self.gaze_data_items[self.gaze_data.currentIndex() - 1],
             validate_file=self.validate_data_items[self.validate_data.currentIndex() - 1])
@@ -608,6 +609,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         filename, _ = qtw.QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
         if filename:
             self.df.to_csv(filename, index=False)
+            self.statusBar().showMessage(f"csv saved at: {os.path.abspath(filename)}", 5000)
 
     def closeEvent(self, event):
         self.system_info_timer.stop()

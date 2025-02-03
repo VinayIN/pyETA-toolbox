@@ -35,11 +35,11 @@ def calculate_statistics(df: pd.DataFrame) -> pd.DataFrame:
         "group": df.group.iloc[0],
         "target position": target,
         "distance (target to gaze points)": (df["distance_left_from_target_px"].mean() + df["distance_right_from_target_px"].mean())/2,
-        "spread (target to gaze points)": (df["distance_left_from_target"].std() + df["distance_right_from_target"].std())/2,
+        "spread (target to gaze points)": (df["distance_left_from_target_px"].std() + df["distance_right_from_target_px"].std())/2,
         "mean gaze point": mean_data,
         "distance (mean to target)": eta_utils.get_distance(mean_data, target),
         "distance (mean to gaze points)": (df["distance_left_from_mean_px"].mean() + df["distance_right_from_mean_px"].mean())/2,
-        "spread (mean to gaze points)": (df["distance_left_from_mean"].std() + df["distance_right_from_mean"].std())/2,
+        "spread (mean to gaze points)": (df["distance_left_from_mean_px"].std() + df["distance_right_from_mean_px"].std())/2,
     }
     return pd.DataFrame(data = [result])
 
