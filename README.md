@@ -34,7 +34,7 @@ In case, this toolbox doesn't works as intended or you find some issues, create 
 | 21  | `timestamp`                 | timestamp      | s          |
 | 22  | `local_clock`               | timestamp      | s          |
 
-## Installation
+## Alternative Installations
 Download the `pyeta-<version>-py3-none-any.whl` file from here: https://github.com/VinayIN/pyETA-toolbox/releases and install using `pip`
 ```bash
 # move the .whl file to your workspace
@@ -52,7 +52,7 @@ pip install git+https://github.com/VinayIN/pyETA-toolbox.git
 ## Usage
 There are 2 ways this tool can be used (CLI - `track/window/validate` & GUI - `browser/application`), both are shown below:
 
-*prerequisite: `pyETA needs to be installed`*
+*prerequisite: `pyETA-toolbox needs to be installed`*
 
 ### 1. CLI
 #### Command:
