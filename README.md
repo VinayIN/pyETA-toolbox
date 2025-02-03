@@ -35,12 +35,12 @@ In case, this toolbox doesn't works as intended or you find some issues, create 
 | 22  | `local_clock`               | timestamp      | s          |
 
 ## Alternative Installations
-Download the `pyeta-<version>-py3-none-any.whl` file from here: https://github.com/VinayIN/pyETA-toolbox/releases and install using `pip`
+Download the `pyeta-toolbox-<version>-py3-none-any.whl` file from here: https://github.com/VinayIN/pyETA-toolbox/releases and install using `pip`
 ```bash
 # move the .whl file to your workspace
 # once moved verify using ls bash command, if found
 # replace .whl file with the one just downloaded. it should have this format with a different <version> 
-pip install pyeta-<version>-py3-none-any.whl
+pip install pyeta-toolbox-<version>-py3-none-any.whl
 ```
 or
 
