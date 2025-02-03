@@ -99,24 +99,12 @@ class ValidationWindow(qtw.QMainWindow):
         circle_center = qtc.QPoint(self.circle_size // 2, self.circle_size // 2)
 
         window_pos = self.circle.mapTo(self, circle_center)
-        relative_x = window_pos.x() / self.width()
-        relative_y = window_pos.y() / self.height()
-
-        # Adjust the circle_screen_pos by the screen's top-left corner
-        circle_screen_pos = self.mapToGlobal(window_pos)
-        screen_geometry = self.geometry()
-        adjusted_circle_screen_pos = qtc.QPoint(
-            circle_screen_pos.x() - screen_geometry.x(),
-            circle_screen_pos.y() - screen_geometry.y()
-        )
-        LOGGER.debug(f"Circle Screen Position: {adjusted_circle_screen_pos}")
-
-        x = int(relative_x * self.screen_width)
-        y = int(relative_y * self.screen_height)
+        relative_pos = eta_utils.get_relative_from_actual((window_pos.x(), window_pos.y()), self.width(), self.height())
+        recalibrated_pos = eta_utils.get_actual_from_relative(relative_pos, self.screen_width, self.screen_height)
         data_point = {
             "timestamp": eta_utils.get_timestamp(),
             "grid_position": self.current_position,
-            "screen_position": (x, y)
+            "screen_position": recalibrated_pos
         }
         LOGGER.debug(f"Grid: {data_point.get('grid_position')}, Target: {self.current_target_pos}, Screen   : {data_point.get('screen_position')}")
         self.collected_data.append(data_point)
@@ -162,7 +150,7 @@ def main(use_mock, screen_index, verbose):
         'push_stream': False,
         'save_data': True,
         'screen_index': screen_index,
-        'duration': (9*(2000+1000))/1000 + (2000*3)/1000 + 2000/1000
+        'duration': (9*(3000+1000))/1000 + (2000*3)/1000 + 2000/1000
     }
 
 

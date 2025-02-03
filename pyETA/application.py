@@ -325,7 +325,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
                 'push_stream': False,
                 'save_data': True,
                 'screen_index': selected_screen_index,
-                'duration': (9*(2000+1000))/1000 + (2000*3)/1000 + 2000/1000
+                'duration': (9*(3000+1000))/1000 + (2000*3)/1000 + 2000/1000
             }
 
             try:

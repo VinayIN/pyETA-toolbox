@@ -37,6 +37,7 @@ def calculate_statistics(df: pd.DataFrame) -> pd.DataFrame:
         "distance (target to gaze points)": (df["distance_left_from_target_px"].mean() + df["distance_right_from_target_px"].mean())/2,
         "spread (target to gaze points)": (df["distance_left_from_target"].std() + df["distance_right_from_target"].std())/2,
         "mean gaze point": mean_data,
+        "distance (mean to target)": eta_utils.get_distance(mean_data, target),
         "distance (mean to gaze points)": (df["distance_left_from_mean_px"].mean() + df["distance_right_from_mean_px"].mean())/2,
         "spread (mean to gaze points)": (df["distance_left_from_mean"].std() + df["distance_right_from_mean"].std())/2,
     }
@@ -64,7 +65,7 @@ def preprocess_data(df_gaze_data: pd.DataFrame, df_validate_data: pd.DataFrame) 
     df_gaze_data['timestamp_0'] = pd.to_datetime(df_gaze_data['timestamp'], unit='s')
     
     df_validate_data['timestamp_0'] = pd.to_datetime(df_validate_data['timestamp'], unit='s')
-    df_validate_data['timestamp_2'] = df_validate_data['timestamp_0'] + datetime.timedelta(seconds=2)
+    df_validate_data['timestamp_3'] = df_validate_data['timestamp_0'] + datetime.timedelta(seconds=3)
 
     df_validate_data["screen_position_recalibrated"] = df_validate_data.screen_position.apply(
         lambda x: convert_window_to_screen_coordinates(x))
@@ -80,7 +81,7 @@ def filter_and_group_data(df_gaze_data: pd.DataFrame, df_validate_data: pd.DataF
     for _, row in df_validate_data.iterrows():
         filtered_gaze_data = df_gaze_data[
             (df_gaze_data['timestamp_0'] >= row['timestamp_0']) & 
-            (df_gaze_data['timestamp_0'] <= row['timestamp_2'])
+            (df_gaze_data['timestamp_0'] <= row['timestamp_3'])
         ].copy()
         
         if not filtered_gaze_data.empty:
