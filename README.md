@@ -1,5 +1,5 @@
 # IMPORTANT
-In case, this toolbox doesn't works as intended or you find some issues, create an issue in the tracker (https://github.com/VinayIN/EyeTrackerAnalyzer/issues) and I will try to resolve it. (Please attach errors & log)
+In case, this toolbox doesn't works as intended or you find some issues, create an issue in the tracker (https://github.com/VinayIN/pyETA-toolbox/issues) and I will try to resolve it. (Please attach errors & log)
 
 # pyETA-toolbox (Eye Tracker Analyzer)
 - This provides a real-time eyetracking metric (especially fixation & Saccades).
@@ -35,7 +35,7 @@ In case, this toolbox doesn't works as intended or you find some issues, create 
 | 22  | `local_clock`               | timestamp      | s          |
 
 ## Installation
-Download the `pyeta-<version>-py3-none-any.whl` file from here: https://github.com/VinayIN/EyeTrackerAnalyzer/releases and install using `pip`
+Download the `pyeta-<version>-py3-none-any.whl` file from here: https://github.com/VinayIN/pyETA-toolbox/releases and install using `pip`
 ```bash
 # move the .whl file to your workspace
 # once moved verify using ls bash command, if found
@@ -44,13 +44,13 @@ pip install pyeta-<version>-py3-none-any.whl
 ```
 or
 
-`CAUTION: This below method installs the developement version and might have bugs`
+`CAUTION: This below method installs the development version and might have bugs`
 ```bash
-pip install git+https://github.com/VinayIN/EyeTrackerAnalyzer.git
+pip install git+https://github.com/VinayIN/pyETA-toolbox.git
 ```
 
 ## Usage
-There are 2 ways this tool can be used (CLI - `track/window/validate` & GUI - `browser/application`), both are showed below:
+There are 2 ways this tool can be used (CLI - `track/window/validate` & GUI - `browser/application`), both are shown below:
 
 *prerequisite: `pyETA needs to be installed`*
 
