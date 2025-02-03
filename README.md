@@ -42,6 +42,12 @@ Download the `pyeta-<version>-py3-none-any.whl` file from here: https://github.c
 # replace .whl file with the one just downloaded. it should have this format with a different <version> 
 pip install pyeta-<version>-py3-none-any.whl
 ```
+or
+
+`CAUTION: This below method installs the developement version and might have bugs`
+```bash
+pip install git+https://github.com/VinayIN/EyeTrackerAnalyzer.git
+```
 
 ## Usage
 There are 2 ways this tool can be used (CLI - `track/window/validate` & GUI - `browser/application`), both are showed below:
