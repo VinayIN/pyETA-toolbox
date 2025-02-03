@@ -277,6 +277,7 @@ class Tracker:
         if self.verbose:
             print(f'L: {multiply_tuples(data["left_eye"]["gaze_point"])} -> {multiply_tuples(data["left_eye"]["filtered_gaze_point"])}, R: {multiply_tuples(data["right_eye"]["gaze_point"])} -> {multiply_tuples(data["right_eye"]["filtered_gaze_point"])}')
             print(f'L: ({data.get("left_eye").get("fixated")}, {data.get("left_eye").get("velocity")}, {data.get("left_eye").get("fixation_elapsed")}), R: ({data.get("right_eye").get("fixated")}, {data.get("right_eye").get("velocity")}, {data.get("right_eye").get("fixation_elapsed")})')
+            print(f'({self.screen_width} x {self.screen_height})')
             print('\n')
 
     def start_tracking(self, duration: Optional[float]=None):

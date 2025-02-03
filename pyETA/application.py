@@ -30,6 +30,8 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.stream_thread = StreamThread()
         self.tracker_thread = TrackerThread()
         self.validate_tracker_thread = TrackerThread()
+        self.is_gaze_playing = False
+        self.is_fixation_playing = False
 
         # Central widget and main layout
         central_widget = qtw.QWidget()
@@ -368,6 +370,16 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         tab = qtw.QWidget()
         layout = qtw.QVBoxLayout(tab)
 
+        control_panel = qtw.QHBoxLayout()
+        self.gaze_play_btn = qtw.QPushButton("Play")
+        self.gaze_play_btn.setFixedSize(60, 30)
+        self.gaze_play_btn.clicked.connect(self.toggle_gaze_play)
+        self.gaze_stream_label = qtw.QLabel("Stream: Not Connected")
+        control_panel.addWidget(self.gaze_play_btn)
+        control_panel.addWidget(self.gaze_stream_label)
+        #control_panel.addStretch()
+        layout.addLayout(control_panel)
+
         # Gaze X Plot
         self.gaze_plot_x = pg.PlotWidget(title="Gaze X Position")
         self.gaze_plot_x.showGrid(x=True, y=True)
@@ -392,6 +404,16 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         tab = qtw.QWidget()
         layout = qtw.QVBoxLayout(tab)
 
+        control_panel = qtw.QHBoxLayout()
+        self.fixation_play_btn = qtw.QPushButton("Play")
+        self.fixation_play_btn.setFixedSize(60, 30)
+        self.fixation_play_btn.clicked.connect(self.toggle_fixation_play)
+        self.fixation_stream_label = qtw.QLabel("Stream: Not Connected")
+        control_panel.addWidget(self.fixation_play_btn)
+        control_panel.addWidget(self.fixation_stream_label)
+        #control_panel.addStretch()
+        layout.addLayout(control_panel)
+
         self.fixation_plot = pg.PlotWidget(title="Fixation Points")
         self.fixation_plot.setXRange(0, self.size().width())
         self.fixation_plot.setYRange(0, self.size().height())
@@ -406,6 +428,15 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         }
         
         return tab
+    
+    def toggle_gaze_play(self):
+        self.is_gaze_playing = not self.is_gaze_playing
+        self.gaze_play_btn.setText("Pause" if self.is_gaze_playing else "Play")
+        
+    def toggle_fixation_play(self):
+        self.is_fixation_playing = not self.is_fixation_playing
+        self.fixation_play_btn.setText("Pause" if self.is_fixation_playing else "Play")
+
     
     def get_gaze_and_validate_data(self):
         gaze = sorted(eta_utils.get_file_names(prefix="gaze_data_"))
@@ -492,11 +523,16 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             inlet = pylsl.StreamInlet(streams[0])
             if inlet.info().name() == "tobii_gaze_fixation":
                 LOGGER.info(f"Stream fetched: {inlet.info().name()}")
+
+                self.gaze_stream_label.setText(f"Stream: {inlet.info().name()} ✔")
+                self.fixation_stream_label.setText(f"Stream: {inlet.info().name()} ✔")
+                
                 self.stream_thread.set_variables(inlet=inlet, refresh_rate=self.refresh_rate_slider.value())
                 self.stream_thread.update_gaze_signal.connect(self.update_gaze_plot)
                 self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
                 self.stream_thread.start()
                 self.statusBar().showMessage("Stream started successfully", 3000)
+
         except Exception as e:
             if self.tracker_thread and self.tracker_thread.isRunning():
                 self.tracker_thread.tracker.signal_break()
@@ -513,18 +549,24 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             try:
                 self.tracker_thread.tracker.signal_break()
                 self.statusBar().showMessage("tracker stopped successfully", 3000)
+                self.gaze_stream_label.setText("Stream: Not Connected")
+                self.fixation_stream_label.setText("Stream: Not Connected")
             except Exception as e:
                 LOGGER.error(f"Error stopping tracker: {str(e)}")
                 self.statusBar().showMessage(f"Error stopping tracker: {str(e)}", 5000)
             self.stream_thread.stop()
             self.statusBar().showMessage("Stream stopped successfully", 3000)
+            self.is_gaze_playing = False
+            self.is_fixation_playing = False
+            self.gaze_play_btn.setText("Play")
+            self.fixation_play_btn.setText("Play")
         except Exception as e:
             LOGGER.error(f"Error stopping stream: {str(e)}")
             self.statusBar().showMessage(f"Error stopping stream: {str(e)}", 5000)
 
 
     def update_gaze_plot(self, times, x, y):
-        if not times or not x or not y:
+        if not times or not x or not y or not self.is_gaze_playing:
             return
         
         self.gaze_plot_x_curve.setData(times, x)
@@ -534,6 +576,8 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             self.gaze_plot_y.setXRange(min(times), max(times))
 
     def update_fixation_plot(self, x_coords, y_coords, counts):
+        if not self.is_fixation_playing:
+            return
         max_count = [min(count, 30) for count in counts]
         scatter = pg.ScatterPlotItem(x=x_coords, y=y_coords, size=max_count, symbol='o', symbolBrush=(255, 0, 0, 150))
         self.fixation_plot.addItem(scatter)

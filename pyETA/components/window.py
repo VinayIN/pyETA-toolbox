@@ -99,12 +99,24 @@ class ValidationWindow(qtw.QMainWindow):
         circle_center = qtc.QPoint(self.circle_size // 2, self.circle_size // 2)
 
         window_pos = self.circle.mapTo(self, circle_center)
+        relative_x = window_pos.x() / self.width()
+        relative_y = window_pos.y() / self.height()
+
+        # Adjust the circle_screen_pos by the screen's top-left corner
         circle_screen_pos = self.mapToGlobal(window_pos)
-        x = circle_screen_pos.x()
+        screen_geometry = self.geometry()
+        adjusted_circle_screen_pos = qtc.QPoint(
+            circle_screen_pos.x() - screen_geometry.x(),
+            circle_screen_pos.y() - screen_geometry.y()
+        )
+        LOGGER.debug(f"Circle Screen Position: {adjusted_circle_screen_pos}")
+
+        x = int(relative_x * self.screen_width)
+        y = int(relative_y * self.screen_height)
         data_point = {
             "timestamp": eta_utils.get_timestamp(),
             "grid_position": self.current_position,
-            "screen_position": (x, circle_screen_pos.y())
+            "screen_position": (x, y)
         }
         LOGGER.debug(f"Grid: {data_point.get('grid_position')}, Target: {self.current_target_pos}, Screen   : {data_point.get('screen_position')}")
         self.collected_data.append(data_point)
