@@ -1,7 +1,7 @@
 # IMPORTANT
 In case, this toolbox doesn't works as intended or you find some issues, create an issue in the tracker (https://github.com/VinayIN/EyeTrackerAnalyzer/issues) and I will try to resolve it. (Please attach errors & log)
 
-# EyeTrackerAnalyzer
+# pyETA-toolbox (Eye Tracker Analyzer)
 - This provides a real-time eyetracking metric (especially fixation & Saccades).
 - This tool also provides for validation of the eye-tracker performance on a user.
 - The tool provides `22 channels`, following table describes the EEG channel information in order:
