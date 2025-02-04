@@ -38,8 +38,9 @@ class TrackerThread(qtc.QThread):
     def stop(self):
         self.running = False
         self.id = None
-        self.quit()
+        self.tracker.signal_break()
         self.wait()
+        self.quit()
         LOGGER.info("Tracker thread stopped!")
 
 class GazeReader:
@@ -116,36 +117,50 @@ class GazeReader:
         self.fixation_data.clear()
 
 class StreamThread(qtc.QThread):
+    found_signal = qtc.pyqtSignal(str)
     update_gaze_signal = qtc.pyqtSignal(list, list, list)
     update_fixation_signal = qtc.pyqtSignal(list, list, list)
-    
+    error_signal = qtc.pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         self.running = False
         self.id = None
         self.buffer_times, self.buffer_x, self.buffer_y = [], [], []
         self.fixation_data = defaultdict(lambda: {'count': 0, 'x': 0, 'y': 0})
-        
-
-    def set_variables(self, inlet, refresh_rate):
-        self.inlet = inlet
-        self.inlet = inlet
-        self.refresh_rate = refresh_rate
-        self.last_refresh = datetime.datetime.now()
     
+    def set_variables(self, refresh_rate, tracker_params):
+        self.last_refresh = datetime.datetime.now()
+        self.refresh_rate = refresh_rate
+        self.tracker_thread = TrackerThread()
+        self.tracker_thread.set_variables(tracker_params)
+        self.tracker_thread.finished_signal.connect(lambda msg: LOGGER.info(msg))
+        self.tracker_thread.error_signal.connect(self.error_signal.emit)
+
     def run(self):
-        self.running = True
-        self.id = threading.get_native_id()
-        
-        while self.running:
-            try:
-                # Clear fixation data based on refresh rate
+        try:
+            self.tracker_thread.start()
+            streams = lsl.resolve_streams(timeout=1, name='tobii_gaze_fixation')
+            if not streams:
+                error_msg = "'tobii_gaze_fixation' stream not found. ✘"
+                LOGGER.error(error_msg)
+                self.error_signal.emit(error_msg)
+                return
+            inlet = lsl.StreamInlet(streams[0])
+            msg = f"Stream: {streams[0].name} ✔"
+            LOGGER.info(msg)
+            self.found_signal.emit(msg)
+
+            self.running = True
+            self.id = threading.get_native_id()
+            
+            while self.running:
                 if (datetime.datetime.now() - self.last_refresh) >= datetime.timedelta(seconds=self.refresh_rate):
                     self.fixation_data.clear()
                     self.buffer_times, self.buffer_x, self.buffer_y = [], [], []
                     self.last_refresh = datetime.datetime.now()
                 
-                sample, _ = self.inlet.pull_sample(timeout=0.0)
+                sample, _ = inlet.pull_sample(timeout=0.1)
                 if sample is None:
                     continue
                 current_time = sample[-2]
@@ -157,34 +172,31 @@ class StreamThread(qtc.QThread):
                 gaze_y = int((sample[8] if sample[8] else sample[17]) * screen_height)
                 self.buffer_x.append(gaze_x)
                 self.buffer_y.append(gaze_y)
-                
-                # Emit gaze data
                 self.update_gaze_signal.emit(self.buffer_times, self.buffer_x, self.buffer_y)
                 
                 # Process fixation data
                 fixation_time = sample[5] if sample[5] else sample[14]
                 is_fixation = sample[3] or sample[12]
-                
                 if is_fixation and fixation_time:
                     key = str(fixation_time)
                     self.fixation_data[key]['count'] += 1
                     self.fixation_data[key]['x'] = gaze_x
                     self.fixation_data[key]['y'] = gaze_y
-                    
-                    # Emit fixation data
                     x_coords = [data['x'] for data in self.fixation_data.values()]
                     y_coords = [data['y'] for data in self.fixation_data.values()]
                     counts = [data['count'] for data in self.fixation_data.values()]
                     self.update_fixation_signal.emit(x_coords, y_coords, counts)
                         
-            except Exception as e:
-                LOGGER.error(f"Stream error: {str(e)}")
-                
+        except Exception as e:
+            LOGGER.error(f"Stream error: {str(e)}")
+            self.error_signal.emit(f"Stream error: {str(e)}")
+    
     def stop(self):
         self.running = False
         self.id = None
+        self.tracker_thread.stop()
         self.buffer_times, self.buffer_x, self.buffer_y = [], [], []
         self.fixation_data.clear()
-        self.quit()
         self.wait()
+        self.quit()
         LOGGER.info("Stream thread stopped!")

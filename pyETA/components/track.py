@@ -59,7 +59,7 @@ class Tracker:
         self.gaze_data = []
         self.gaze_id = None
         self.lsl_gaze_outlet = None
-        self.break_flag = False
+        self._break_flag = False
         self.id = None
         
         try:
@@ -291,9 +291,10 @@ class Tracker:
                 LOGGER.debug("Starting tracking...")
                 self.eyetracker.subscribe_to(self.gaze_id, self._collect_gaze_data, as_dictionary=True)
                 while True:
-                    if end_time and datetime.datetime.now() >= end_time or self.break_flag:
+                    if end_time and datetime.datetime.now() >= end_time or self._break_flag:
                         self.stop_tracking()
                         LOGGER.info("Tracking stopped from loop!")
+                        self._break_flag = False
                         break
                     time.sleep(1)
             except KeyboardInterrupt:
@@ -314,7 +315,7 @@ class Tracker:
             LOGGER.debug("No eye tracker found!")
     
     def signal_break(self):
-        self.break_flag = True
+        self._break_flag = True
 
     def stop_tracking(self):
         self.id = None

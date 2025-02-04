@@ -23,13 +23,13 @@ import pyETA.components.utils as eta_utils
 import pyETA.components.validate as eta_validate
 
 class EyeTrackerAnalyzer(qtw.QMainWindow):
+    """Main application window for pyETA"""
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"pyETA-{__version__}")
         self.resize(1200, 800)
         self.stream_thread = StreamThread()
-        self.tracker_thread = TrackerThread()
-        self.validate_tracker_thread = TrackerThread()
+        self.validate_thread = TrackerThread()
         self.is_gaze_playing = False
         self.is_fixation_playing = False
 
@@ -86,6 +86,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         """)
 
     def create_sidebar(self):
+        """Create the sidebar with system information and about section"""
         frame = qtw.QFrame()
         layout = qtw.QVBoxLayout(frame)
 
@@ -128,6 +129,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         return frame
 
     def create_system_info_card(self):
+        """Create the system information card with refresh rate slider"""
         card = qtw.QFrame()
         card.setFrameShape(qtw.QFrame.Shape.Box)
         layout = qtw.QVBoxLayout(card)
@@ -162,8 +164,8 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             "status": qtw.QLabel(),
             "pid": qtw.QLabel(),
             "stream id": qtw.QLabel(),
-            "tracker id": qtw.QLabel(),
             "validate id": qtw.QLabel(),
+            "total threads": qtw.QLabel(),
             "runtime": qtw.QLabel(),
             "memory": qtw.QLabel(),
             "storage": qtw.QLabel(),
@@ -177,6 +179,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         return card
 
     def update_system_info(self):
+        """Update the system information labels"""
         process = psutil.Process(os.getpid())
         memory_info = process.memory_info()
         cpu_percent = process.cpu_percent(interval=0.1)
@@ -184,15 +187,16 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         runtime = datetime.datetime.now() - datetime.datetime.fromtimestamp(process.create_time())
 
         self.system_info_labels["pid"].setText(f"<strong>Application PID:</strong> {process.pid}")
-        self.system_info_labels["stream id"].setText(f"<strong>Stream Thread ID:</strong> {self.stream_thread.id}")
-        self.system_info_labels["tracker id"].setText(f"<strong>Tracker Thread ID:</strong> {self.tracker_thread.id}")
-        self.system_info_labels["validate id"].setText(f"<strong>Validate Thread ID:</strong> {self.validate_tracker_thread.id}")
+        self.system_info_labels["stream id"].setText(f"<strong>Stream Thread ID:</strong> {self.stream_thread.id if self.stream_thread else 'Not Running'}")
+        self.system_info_labels["validate id"].setText(f"<strong>Validate Thread ID:</strong> {self.validate_thread.id if self.validate_thread else 'Not Running'}")
+        self.system_info_labels["total threads"].setText(f"<strong>Total Threads:</strong> {threading.active_count()}")
         self.system_info_labels["runtime"].setText(f"<strong>Runtime:</strong> {runtime}")
         self.system_info_labels["memory"].setText(f"<strong>Memory:</strong> {memory_info.rss / 1024**2:.1f} MB")
         self.system_info_labels["storage"].setText(f"<strong>Storage available:</strong> {storage_free:.1f} GB")
         self.system_info_labels["cpu"].setText(f"<strong>CPU Usage:</strong> {cpu_percent:.1f}%")
 
     def refresh_application(self):
+        """Refresh the application by clearing the data and updating the files info in metrics tab"""
         self.gaze_plot_x_curve.clear()
         self.gaze_plot_y_curve.clear()
         self.fixation_plot.clear()
@@ -201,6 +205,15 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.statusBar().showMessage("Application refreshed successfully", 5000)
     
     def create_stream_configuration(self):
+        """
+        Creates the stream configuration layout for the application.
+        This method sets up the user interface components for configuring the stream,
+        including stream type selection, data rate adjustment, velocity threshold setting,
+        and various checkboxes for additional options. It also includes buttons for
+        starting, stopping, and validating the stream.
+        Returns:
+            QHBoxLayout: The main horizontal layout containing all the configuration components.
+        """
         # Main Horizontal Layout
         main_layout = qtw.QHBoxLayout()
 
@@ -289,6 +302,20 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         return main_layout
 
     def setup_tabs(self):
+        """
+        Sets up the tabs for the application.
+        This method creates three tabs: Gaze Data, Fixation, and Metrics.
+        It initializes each tab by calling the respective creation methods
+        and then adds them to the tab widget.
+        Tabs:
+            - Gaze Data: Displays gaze data.
+            - Fixation: Displays fixation data.
+            - Metrics: Displays various metrics.
+        Methods called:
+            - create_gaze_data_tab: Creates the Gaze Data tab.
+            - create_fixation_tab: Creates the Fixation tab.
+            - create_metrics_tab: Creates the Metrics tab.
+        """
         # Tabs: Gaze Data, Fixation, Metrics
         self.gaze_tab = self.create_gaze_data_tab()
         self.fixation_tab = self.create_fixation_tab()
@@ -299,6 +326,17 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.tab_widget.addTab(self.metrics_tab, "Metrics")
 
     def validate_eye_tracker(self):
+        """
+        Opens a dialog for selecting a screen to use for eye tracker validation and starts the validation process.
+        The method performs the following steps:
+        1. Opens a QDialog to allow the user to select a screen for validation.
+        2. Checks if the validation tracker thread is already running and shows a warning if it is.
+        3. Sets up the validation parameters and starts the validation process on the selected screen.
+        4. Handles any exceptions that occur during the validation process and logs the error.
+        Returns:
+        None
+        """
+        
         # Screen Selection Dialog
         screen_dialog = qtw.QDialog()
         screen_dialog.setWindowTitle("Select Validation Screen")
@@ -312,7 +350,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         layout.addWidget(qtw.QLabel("Choose Validation Screen:"))
         layout.addWidget(screen_combo)
 
-        if self.validate_tracker_thread and self.validate_tracker_thread.isRunning():
+        if self.validate_thread and self.validate_thread.isRunning():
             qtw.QMessageBox.warning(self, "Warning", "Validation Tracker is already running. Please stop the stream")
             return
 
@@ -332,10 +370,10 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
                 from pyETA.components.window import run_validation_window
 
                 self.validation_window = run_validation_window(screen_index=selected_screen_index)
-                self.validate_tracker_thread.set_variables(tracker_params)
-                self.validate_tracker_thread.finished_signal.connect(lambda msg: self.stop_validation_thread(msg))
-                self.validate_tracker_thread.error_signal.connect(lambda msg: self.stop_validation_thread(msg, level="critical"))
-                self.validate_tracker_thread.start()
+                self.validate_thread.set_variables(tracker_params)
+                self.validate_thread.finished_signal.connect(lambda msg: qtw.QMessageBox.information(self, "Validation Thread", msg))
+                self.validate_thread.error_signal.connect(lambda msg: qtw.QMessageBox.critical(self, "Validation Thread", msg))
+                self.validate_thread.start()
                 self.validation_window.show()
 
                 self.statusBar().showMessage("Validation started", 10000)
@@ -350,23 +388,16 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         layout.addWidget(validate_btn)
         screen_dialog.exec()
     
-    def stop_tracker_thread(self, msg, level="info"):
-        if self.tracker_thread.isRunning():
-            self.tracker_thread.stop()
-        if level == "critical":
-            qtw.QMessageBox.critical(self, "Tracking Thread", msg)
-        else:
-            qtw.QMessageBox.information(self, "Tracking Thread", msg)
-
-    def stop_validation_thread(self, msg, level="info"):
-        if self.validate_tracker_thread.isRunning():
-            self.validate_tracker_thread.stop()
-        if level == "critical":
-            qtw.QMessageBox.critical(self, "Validation Thread", msg)
-        else:
-            qtw.QMessageBox.information(self, "Validation Thread", msg)
-
     def create_gaze_data_tab(self):
+        """
+        Creates a tab for displaying gaze data with control panel and plots.
+        This method sets up a QWidget containing a vertical layout with the following components:
+        - A control panel with a "Play" button and a label indicating the stream status.
+        - A plot for displaying the gaze X position over time.
+        - A plot for displaying the gaze Y position over time.
+        Returns:
+            QWidget: The tab containing the gaze data visualization components.
+        """
         tab = qtw.QWidget()
         layout = qtw.QVBoxLayout(tab)
 
@@ -401,6 +432,14 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         return tab
 
     def create_fixation_tab(self):
+        """
+        Creates a tab for displaying fixation points in the application.
+        This method sets up a QWidget with a QVBoxLayout containing a control panel
+        with a play button and a stream status label, and a PlotWidget for displaying
+        fixation points. It also initializes a dictionary to store current fixation data.
+        Returns:
+            QWidget: The tab widget containing the fixation points display and controls.
+        """
         tab = qtw.QWidget()
         layout = qtw.QVBoxLayout(tab)
 
@@ -430,20 +469,23 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         return tab
     
     def toggle_gaze_play(self):
+        """toggle button for gaze plot"""
         self.is_gaze_playing = not self.is_gaze_playing
         self.gaze_play_btn.setText("Pause" if self.is_gaze_playing else "Play")
         
     def toggle_fixation_play(self):
+        """toggle button for fixation plot"""
         self.is_fixation_playing = not self.is_fixation_playing
         self.fixation_play_btn.setText("Pause" if self.is_fixation_playing else "Play")
-
     
     def get_gaze_and_validate_data(self):
+        """fetch gaze&validate data files"""
         gaze = sorted(eta_utils.get_file_names(prefix="gaze_data_"))
         validate = sorted(eta_utils.get_file_names(prefix="system_"))
         return gaze, validate
 
     def create_metrics_tab(self):
+        """Create the metrics tab for the application."""
         tab = qtw.QWidget()
         layout = qtw.QVBoxLayout(tab)
         metrics_title = qtw.QLabel("<h2>Statistics: Eye Tracker Validation</h2>")
@@ -476,6 +518,15 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         return tab
 
     def adjust_refresh_rate(self, value=None):
+        """
+        Adjusts the refresh rate of the stream thread and resets fixation plot data.
+        Parameters:
+        value (int, optional): The new refresh rate in Hz. If not provided, the refresh rate will not be adjusted.
+        Behavior:
+        - If a value is provided, the refresh rate timer interval is set to the specified value in milliseconds.
+        - If the stream thread is running, its refresh rate is updated and a log message is generated.
+        - Clears the fixation plot and resets the current fixation data.
+        """
         if value is not None:
             self.refresh_rate_timer.setInterval(value*1000)
         
@@ -486,8 +537,8 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.fixation_plot.clear()
         self.current_fixations = {'x_coords': [], 'y_coords': [], 'counts': []}
 
-
     def update_metric_tab(self):
+        """update gaze and validate data files, upon called"""
         self.gaze_data_items, self.validate_data_items = self.get_gaze_and_validate_data()
         self.gaze_data.clear()
         self.gaze_data.addItems(['select gaze data'] + [f"File {idx+1}: {eta_validate.get_gaze_data_timestamp(file)}" for idx, file in enumerate(self.gaze_data_items)])
@@ -495,11 +546,21 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.validate_data.addItems(['select validation data'] + [f"File {idx+1} {eta_validate.get_validate_data_timestamp(file)}" for idx,file in enumerate(self.validate_data_items)])
 
     def start_stream(self):
-        if self.stream_thread and self.stream_thread.isRunning():
+        """
+        Starts the data stream and initializes the tracker and stream threads.
+        This method performs the following steps:
+        1. Checks if the stream or tracker threads are already running and displays a warning if they are.
+        2. Sets up tracker parameters based on the current UI settings.
+        3. Initializes and starts the tracker thread with the specified parameters.
+        4. Resolves the LSL stream and initializes the stream inlet.
+        5. If the stream is successfully fetched, updates the UI labels and starts the stream thread.
+        6. Displays a success message in the status bar if the stream starts successfully.
+        7. Handles exceptions by stopping the tracker thread if necessary and displaying an error message.
+        Raises:
+            Exception: If there is an error starting the stream, an error message is displayed and logged.
+        """
+        if self.stream_thread.isRunning():
             qtw.QMessageBox.warning(self, "Warning", "Stream is already running.")
-            return
-        if self.tracker_thread and self.tracker_thread.isRunning():
-            qtw.QMessageBox.warning(self, "Warning", "Tracker is running. Please stop the stream.")
             return
         
         tracker_params = {
@@ -514,58 +575,55 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         }
         
         try:
-            self.tracker_thread.set_variables(tracker_params)
-            self.tracker_thread.finished_signal.connect(lambda msg: self.stop_tracker_thread(msg))
-            self.tracker_thread.error_signal.connect(lambda msg: self.stop_tracker_thread(msg, level="critical"))
-            self.tracker_thread.start()
-            
-            streams = pylsl.resolve_streams(wait_time=1)
-            inlet = pylsl.StreamInlet(streams[0])
-            if inlet.info().name() == "tobii_gaze_fixation":
-                LOGGER.info(f"Stream fetched: {inlet.info().name()}")
-
-                self.gaze_stream_label.setText(f"Stream: {inlet.info().name()} ✔")
-                self.fixation_stream_label.setText(f"Stream: {inlet.info().name()} ✔")
-                
-                self.stream_thread.set_variables(inlet=inlet, refresh_rate=self.refresh_rate_slider.value())
-                self.stream_thread.update_gaze_signal.connect(self.update_gaze_plot)
-                self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
-                self.stream_thread.start()
-                self.statusBar().showMessage("Stream started successfully", 3000)
+            self.stream_thread.set_variables(refresh_rate=self.refresh_rate_slider.value(), tracker_params=tracker_params)
+            self.stream_thread.found_signal.connect(lambda msg: self.update_plot_label(msg))
+            self.stream_thread.update_gaze_signal.connect(self.update_gaze_plot)
+            self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
+            self.stream_thread.error_signal.connect(lambda msg: qtw.QMessageBox.critical(self, "Error", msg))
+            self.stream_thread.start()
+            self.statusBar().showMessage("Stream started successfully", 3000)
 
         except Exception as e:
-            if self.tracker_thread and self.tracker_thread.isRunning():
-                self.tracker_thread.tracker.signal_break()
             error_msg = f"Failed to start stream: {str(e)}"
             qtw.QMessageBox.critical(self, "Error", error_msg)
             LOGGER.error(error_msg)
 
     def stop_stream(self):
-        if not self.stream_thread or not self.stream_thread.isRunning():
+        """
+        Stops the active stream and updates the UI accordingly.
+        This method stops the active stream if it is running. It first attempts to stop the tracker thread,
+        updating the status bar and stream labels to indicate the stream is not connected. If an error occurs
+        while stopping the tracker, it logs the error and updates the status bar with an error message.
+        After stopping the tracker, it stops the stream thread, updates the status bar, and resets the play
+        buttons and playing status flags for gaze and fixation streams.
+        Raises:
+            Exception: If an error occurs while stopping the stream or tracker.
+        """
+        if not self.stream_thread.isRunning():
             qtw.QMessageBox.warning(self, "Warning", "No active stream to stop.")
             return
         
         try:
-            try:
-                self.tracker_thread.tracker.signal_break()
-                self.statusBar().showMessage("tracker stopped successfully", 3000)
-                self.gaze_stream_label.setText("Stream: Not Connected")
-                self.fixation_stream_label.setText("Stream: Not Connected")
-            except Exception as e:
-                LOGGER.error(f"Error stopping tracker: {str(e)}")
-                self.statusBar().showMessage(f"Error stopping tracker: {str(e)}", 5000)
+
             self.stream_thread.stop()
+            self.stream_thread.wait()
             self.statusBar().showMessage("Stream stopped successfully", 3000)
             self.is_gaze_playing = False
             self.is_fixation_playing = False
             self.gaze_play_btn.setText("Play")
             self.fixation_play_btn.setText("Play")
+            self.update_plot_label()
         except Exception as e:
             LOGGER.error(f"Error stopping stream: {str(e)}")
             self.statusBar().showMessage(f"Error stopping stream: {str(e)}", 5000)
 
+    def update_plot_label(self, msg="Stream: Not Connected"):
+        """update the stream label with the message"""
+        self.gaze_stream_label.setText(msg)
+        self.fixation_stream_label.setText(msg)
 
     def update_gaze_plot(self, times, x, y):
+        """update gaze plot with a moving time window"""
         if not times or not x or not y or not self.is_gaze_playing:
             return
         
@@ -576,6 +634,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             self.gaze_plot_y.setXRange(min(times), max(times))
 
     def update_fixation_plot(self, x_coords, y_coords, counts):
+        """update fixation plot with increasing size of scatter point based on counts"""
         if not self.is_fixation_playing:
             return
         max_count = [min(count, 30) for count in counts]
@@ -583,6 +642,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.fixation_plot.addItem(scatter)
 
     def update_metrics_table(self):
+        """update the table with metrics calculated from gaze and validate data using `eta_validate:get_statistics()`"""
         self.statusBar().showMessage("Calculating", 2000)
         self.df = eta_validate.get_statistics(
             gaze_file=self.gaze_data_items[self.gaze_data.currentIndex() - 1],
@@ -602,6 +662,14 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.statusBar().showMessage("Metrics generated successfully", 5000)
 
     def download_csv(self):
+        """
+        Prompts the user to save the current DataFrame as a CSV file.
+        If the DataFrame is empty, displays an error message and exits the function.
+        Otherwise, opens a file dialog for the user to specify the save location and filename.
+        Saves the DataFrame to the specified CSV file and shows a status message indicating the save location.
+        Returns:
+            None
+        """
         if self.df.empty:
             qtw.QMessageBox.critical(self, "Error", "No data to save as CSV")
             return
@@ -614,10 +682,22 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
     def closeEvent(self, event):
         self.system_info_timer.stop()
         self.refresh_rate_timer.stop()
+        if self.stream_thread.isRunning():
+            self.stream_thread.stop()
+            LOGGER.info("Stopping stream thread during closeEvent")
+        if self.validate_thread.isRunning():
+            self.validate_thread.stop()
+            LOGGER.info("Stopping validate thread during closeEvent")
         event.accept()
 
 @click.command(name="application")
 def main():
+    """
+    Entry point for the Eye Tracker Analyzer application.
+    This function initializes the Qt application, creates an instance of the 
+    EyeTrackerAnalyzer window, displays it, and starts the application's 
+    event loop.
+    """
     app = qtw.QApplication(sys.argv)
     window = EyeTrackerAnalyzer()
     window.show()

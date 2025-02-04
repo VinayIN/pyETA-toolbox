@@ -14,7 +14,11 @@ console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(logging.Formatter(CONSOLE_LOG_FORMAT))
 
-file_handler = logging.FileHandler("debug.log", mode='w', encoding='utf-8')
+file_handler = logging.handlers.RotatingFileHandler(
+    filename="debug.log",
+    mode='w',
+    maxBytes=1000000, # 1MB
+    encoding='utf-8', backupCount=2)
 file_handler.setLevel(logging.DEBUG)
 file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
 
