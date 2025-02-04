@@ -1,12 +1,12 @@
 [tool.poetry]
-name = "pyETA"
-version = "0.0.8.dev1"
+name = "pyETA-toolbox"
+version = "0.0.9.dev1"
 description = "This toolbox provides a realtime visualization of eye tracking data to be used for designing passive BCI system."
-authors = ["Binay Kumar Pradhan <pradhan.binay@b-tu.de>"]
+authors = ["Binay Kumar Pradhan <bpradhan.asli@gmail.com>"]
 readme = "README.md"
-license = "MIT"
-repository = "https://github.com/VinayIN/EyeTrackerAnalyzer"
-keywords = ["eyetracker", "tobii", "mock tobii", "passiveBCI"]
+license = "GPL-3.0"
+repository = "https://github.com/VinayIN/pyETA-toolbox.git"
+keywords = ["eyetracker", "tobii", "mock tobii", "passiveBCI", "real-time eye tracking", "tobii-research"]
 packages = [
     { include = "pyETA" }
 ]
@@ -22,7 +22,7 @@ pyqt6 = "^6.8.0"
 pynput = "^1.7.7"
 dash-bootstrap-components = "^1.6.0"
 click = "^8.1.8"
-tobii-research = "^2.1.0"
+tobii-research = "1.11.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
@@ -30,7 +30,7 @@ ipython = "^8.31.0"
 pytest-asyncio = "^0.24.0"
 
 [tool.pytest.ini_options]
-testpaths = ["EyeTrackerAnalyzer/tests"]
+testpaths = ["pyETA-toolbox/tests"]
 log_cli = true
 log_cli_level = "INFO"
 log_file_format = "%(asctime)s :: %(name)s:%(filename)s:%(lineno)d :: %(levelname)s :: %(message)s"
