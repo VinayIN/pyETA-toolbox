@@ -7,6 +7,7 @@ from pyETA.components.track import Tracker
 from pyETA import LOGGER
 import PyQt6.QtCore as qtc
 import numpy as np
+import time
 
 
 class TrackerThread(qtc.QThread):
@@ -36,9 +37,10 @@ class TrackerThread(qtc.QThread):
             self.error_signal.emit(error_msg)
 
     def stop(self):
+        """Stop tracker thread."""
         self.running = False
         self.id = None
-        self.tracker.signal_break()
+        if self.tracker.id: self.tracker.signal_break()
         self.wait()
         self.quit()
         LOGGER.info("Tracker thread stopped!")
@@ -140,6 +142,7 @@ class StreamThread(qtc.QThread):
     def run(self):
         try:
             self.tracker_thread.start()
+            time.sleep(2)
             streams = lsl.resolve_streams(timeout=1, name='tobii_gaze_fixation')
             if not streams:
                 error_msg = "'tobii_gaze_fixation' stream not found. ✘"

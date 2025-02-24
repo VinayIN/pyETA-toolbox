@@ -6,6 +6,7 @@ import json
 import time
 import click
 import threading
+import pylsl
 
 from typing import Optional
 from mne_lsl import lsl
@@ -84,24 +85,15 @@ class Tracker:
                 raise ValueError("No eye tracker device/Mock found.")
         except Exception as e:
             raise ValueError(f"Error initializing the eye tracker: {e}")
-        self.__fixation_left = FixationTuple()
-        self.__fixation_right = FixationTuple()
-        if self.fixation:
-            min_cutoff = 1.5
-            beta = 1
-            self.__one_euro_filter = self.create_filter(
-                min_cutoff,
-                beta,
-                elements=["left_eye_x", "left_eye_y", "right_eye_x", "right_eye_y"])
-
         if self.push_stream:
-            debug = lsl.StreamInfo(
+            stream_info = lsl.StreamInfo(
                 name='tobii_gaze_fixation',
                 stype='Gaze',
                 n_channels=22,
                 sfreq=self.data_rate,
                 dtype='float64',
                 source_id=self.eyetracker.serial_number)
+            LOGGER.info(f"Stream name: {stream_info.name}")
 
             ch_info = [
                 #left eye
@@ -132,11 +124,20 @@ class Tracker:
             ]
             
             ch_names, ch_types, ch_units = zip(*ch_info)
-            debug.set_channel_names(ch_names)
-            debug.set_channel_types(ch_types)
-            debug.set_channel_units(ch_units)
-            self.lsl_gaze_outlet = lsl.StreamOutlet(debug)
+            stream_info.set_channel_names(ch_names)
+            stream_info.set_channel_types(ch_types)
+            stream_info.set_channel_units(ch_units)
+            self.lsl_gaze_outlet = lsl.StreamOutlet(stream_info)
             LOGGER.info(f"LSL Stream Info: {self.lsl_gaze_outlet.get_sinfo()}")
+        self.__fixation_left = FixationTuple()
+        self.__fixation_right = FixationTuple()
+        if self.fixation:
+            min_cutoff = 1.5
+            beta = 1
+            self.__one_euro_filter = self.create_filter(
+                min_cutoff,
+                beta,
+                elements=["left_eye_x", "left_eye_y", "right_eye_x", "right_eye_y"])
         LOGGER.debug(f"Member Variables: {vars(self)}")
         print("Press Ctrl+C to stop tracking...")
     
@@ -288,7 +289,7 @@ class Tracker:
         if self.eyetracker:
             self.id = threading.get_native_id()
             try:
-                LOGGER.debug("Starting tracking...")
+                LOGGER.info("Starting tracking...")
                 self.eyetracker.subscribe_to(self.gaze_id, self._collect_gaze_data, as_dictionary=True)
                 while True:
                     if end_time and datetime.datetime.now() >= end_time or self._break_flag:

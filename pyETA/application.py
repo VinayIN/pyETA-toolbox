@@ -45,7 +45,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         splitter.addWidget(self.sidebar)
         self.system_info_timer = qtc.QTimer()
         self.system_info_timer.timeout.connect(self.update_system_info)
-        self.system_info_timer.start(1000)
+        self.system_info_timer.start(100)
 
         self.refresh_rate_timer = qtc.QTimer()
         self.refresh_rate_timer.timeout.connect(self.adjust_refresh_rate)
@@ -387,6 +387,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         validate_btn.clicked.connect(start_validation)
         layout.addWidget(validate_btn)
         screen_dialog.exec()
+        #self.validate_thread.stop()
     
     def create_gaze_data_tab(self):
         """
@@ -559,13 +560,13 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         Raises:
             Exception: If there is an error starting the stream, an error message is displayed and logged.
         """
-        if self.stream_thread.isRunning():
+        if self.stream_thread and self.stream_thread.isRunning():
             qtw.QMessageBox.warning(self, "Warning", "Stream is already running.")
             return
         
         tracker_params = {
             'data_rate': self.data_rate_slider.value(),
-            'use_mock': self.stream_type_combo.currentText(),
+            'use_mock': self.stream_type_combo.currentText() == "Mock",
             'fixation': self.fixation_check.isChecked(),
             'velocity_threshold': self.velocity_threshold_spinbox.value(),
             'dont_screen_nans': self.dont_screen_nans_check.isChecked(),
@@ -585,7 +586,6 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
 
         except Exception as e:
             error_msg = f"Failed to start stream: {str(e)}"
-            qtw.QMessageBox.critical(self, "Error", error_msg)
             LOGGER.error(error_msg)
 
     def stop_stream(self):
@@ -606,7 +606,6 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         try:
 
             self.stream_thread.stop()
-            self.stream_thread.wait()
             self.statusBar().showMessage("Stream stopped successfully", 3000)
             self.is_gaze_playing = False
             self.is_fixation_playing = False
@@ -682,12 +681,13 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
     def closeEvent(self, event):
         self.system_info_timer.stop()
         self.refresh_rate_timer.stop()
-        if self.stream_thread.isRunning():
+        if self.stream_thread and self.stream_thread.isRunning():
             self.stream_thread.stop()
             LOGGER.info("Stopping stream thread during closeEvent")
-        if self.validate_thread.isRunning():
+        if self.validate_thread and self.validate_thread.isRunning():
             self.validate_thread.stop()
             LOGGER.info("Stopping validate thread during closeEvent")
+        
         event.accept()
 
 @click.command(name="application")
