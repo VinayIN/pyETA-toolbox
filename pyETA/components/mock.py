@@ -17,7 +17,6 @@ class MockEyeTracker(Thread):
         Thread.__init__(self, name="MockEyeTracker", daemon=True)
         self.verbose = verbose
         self.data_rate = data_rate
-        self.listener = None
         self.screen_width, self.screen_height = utils.get_current_screen_size()
         self.address ="ZA03046BINAY2024"
         self.model = "ZA03046BINAY2024"
@@ -27,6 +26,7 @@ class MockEyeTracker(Thread):
         self.curr_x = 0.0
         self.curr_y = 0.0
         self.should_stop = False
+        self.listener = None
 
     def subscribe_to(self, id, callback, as_dictionary=True):
         if id not in KNOWN_DATA_IDS:
@@ -58,30 +58,36 @@ class MockEyeTracker(Thread):
 
     def run(self):
         self.listener = mouse.Listener(on_move=self.on_move)
-        with self.listener as lis:
-            while not self.should_stop:
-                time.sleep(.99 / self.data_rate)
-                x = self.curr_x
-                y = self.curr_y
+        self.listener.start()
+        while not self.should_stop:
+            time.sleep(.99 / self.data_rate)
+            x = self.curr_x
+            y = self.curr_y
 
-                if EYETRACKER_GAZE_DATA in self.callbacks:
-                    self.callbacks[EYETRACKER_GAZE_DATA](
-                        {
-                            "device_time_stamp": utils.get_timestamp(),
-                            "system_time_stamp": utils.get_timestamp(),
-                            'left_gaze_point_on_display_area': [x, y],
-                            'left_gaze_point_validity': random.uniform(0, 1) > 0.5,
-                            'right_gaze_point_on_display_area': [x, y],
-                            'right_gaze_point_validity': random.uniform(0, 1) > 0.5,
-                            'left_pupil_diameter': 8.0 + 4 * random.uniform(-1, 1),
-                            'left_pupil_validity': random.uniform(0, 1) > 0.5,
-                            'right_pupil_diameter': 8.0 + 4 * random.uniform(-1, 1),
-                            'right_pupil_validity': random.uniform(0, 1) > 0.5
-                        })
-            lis.join()
+            if EYETRACKER_GAZE_DATA in self.callbacks:
+                self.callbacks[EYETRACKER_GAZE_DATA](
+                    {
+                        "device_time_stamp": utils.get_timestamp(),
+                        "system_time_stamp": utils.get_timestamp(),
+                        'left_gaze_point_on_display_area': [x, y],
+                        'left_gaze_point_validity': random.uniform(0, 1) > 0.5,
+                        'right_gaze_point_on_display_area': [x, y],
+                        'right_gaze_point_validity': random.uniform(0, 1) > 0.5,
+                        'left_pupil_diameter': 8.0 + 4 * random.uniform(-1, 1),
+                        'left_pupil_validity': random.uniform(0, 1) > 0.5,
+                        'right_pupil_diameter': 8.0 + 4 * random.uniform(-1, 1),
+                        'right_pupil_validity': random.uniform(0, 1) > 0.5
+                    })
+        self.listener.stop()
+        self.listener.join()
 
     def stop(self):
+        """Stop the mock eye tracker"""
         self.should_stop = True
+        if self.listener and self.listener.is_alive():
+            self.listener.stop()
+            self.listener.join()
+        self.join()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

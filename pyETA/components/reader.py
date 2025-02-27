@@ -142,7 +142,6 @@ class StreamThread(qtc.QThread):
     def run(self):
         try:
             self.tracker_thread.start()
-            time.sleep(2)
             streams = lsl.resolve_streams(timeout=1, name='tobii_gaze_fixation')
             if not streams:
                 error_msg = "'tobii_gaze_fixation' stream not found. ✘"
@@ -189,6 +188,7 @@ class StreamThread(qtc.QThread):
                     y_coords = [data['y'] for data in self.fixation_data.values()]
                     counts = [data['count'] for data in self.fixation_data.values()]
                     self.update_fixation_signal.emit(x_coords, y_coords, counts)
+            self.tracker_thread.stop()
                         
         except Exception as e:
             LOGGER.error(f"Stream error: {str(e)}")
@@ -197,7 +197,6 @@ class StreamThread(qtc.QThread):
     def stop(self):
         self.running = False
         self.id = None
-        self.tracker_thread.stop()
         self.buffer_times, self.buffer_x, self.buffer_y = [], [], []
         self.fixation_data.clear()
         self.wait()

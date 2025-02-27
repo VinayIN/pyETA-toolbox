@@ -28,8 +28,8 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         super().__init__()
         self.setWindowTitle(f"pyETA-{__version__}")
         self.resize(1200, 800)
-        self.stream_thread = StreamThread()
-        self.validate_thread = TrackerThread()
+        self.stream_thread = None
+        self.validate_thread = None
         self.is_gaze_playing = False
         self.is_fixation_playing = False
 
@@ -190,6 +190,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.system_info_labels["stream id"].setText(f"<strong>Stream Thread ID:</strong> {self.stream_thread.id if self.stream_thread else 'Not Running'}")
         self.system_info_labels["validate id"].setText(f"<strong>Validate Thread ID:</strong> {self.validate_thread.id if self.validate_thread else 'Not Running'}")
         self.system_info_labels["total threads"].setText(f"<strong>Total Threads:</strong> {threading.active_count()}")
+        #LOGGER.info(f"Total Threads: {threading.active_count()}, Ids: {[(thread.name, thread.native_id)  for thread in threading.enumerate()]}")
         self.system_info_labels["runtime"].setText(f"<strong>Runtime:</strong> {runtime}")
         self.system_info_labels["memory"].setText(f"<strong>Memory:</strong> {memory_info.rss / 1024**2:.1f} MB")
         self.system_info_labels["storage"].setText(f"<strong>Storage available:</strong> {storage_free:.1f} GB")
@@ -370,6 +371,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
                 from pyETA.components.window import run_validation_window
 
                 self.validation_window = run_validation_window(screen_index=selected_screen_index)
+                self.validate_thread = TrackerThread()
                 self.validate_thread.set_variables(tracker_params)
                 self.validate_thread.finished_signal.connect(lambda msg: qtw.QMessageBox.information(self, "Validation Thread", msg))
                 self.validate_thread.error_signal.connect(lambda msg: qtw.QMessageBox.critical(self, "Validation Thread", msg))
@@ -387,7 +389,9 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         validate_btn.clicked.connect(start_validation)
         layout.addWidget(validate_btn)
         screen_dialog.exec()
-        #self.validate_thread.stop()
+        if self.validate_thread and self.validate_thread.isRunning():
+            self.validate_thread.stop()
+            self.validate_thread = None
     
     def create_gaze_data_tab(self):
         """
@@ -576,6 +580,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         }
         
         try:
+            self.stream_thread = StreamThread()
             self.stream_thread.set_variables(refresh_rate=self.refresh_rate_slider.value(), tracker_params=tracker_params)
             self.stream_thread.found_signal.connect(lambda msg: self.update_plot_label(msg))
             self.stream_thread.update_gaze_signal.connect(self.update_gaze_plot)
@@ -606,6 +611,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         try:
 
             self.stream_thread.stop()
+            self.stream_thread = None
             self.statusBar().showMessage("Stream stopped successfully", 3000)
             self.is_gaze_playing = False
             self.is_fixation_playing = False
