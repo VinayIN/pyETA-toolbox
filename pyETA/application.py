@@ -203,6 +203,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.fixation_plot.clear()
         self.update_metric_tab()
         self.metrics_table.clear()
+        eta_utils.close_dummy_threads() # This is a workaround. remove after finding the cause for dummy thread
         self.statusBar().showMessage("Application refreshed successfully", 5000)
     
     def create_stream_configuration(self):
@@ -609,7 +610,6 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             return
         
         try:
-
             self.stream_thread.stop()
             self.stream_thread = None
             self.statusBar().showMessage("Stream stopped successfully", 3000)
@@ -618,6 +618,8 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             self.gaze_play_btn.setText("Play")
             self.fixation_play_btn.setText("Play")
             self.update_plot_label()
+            LOGGER.warning(f"Thread count after stop stream: {threading.active_count()}")
+            LOGGER.warning(f"Threads alive: {[t.name for t in threading.enumerate()]}")
         except Exception as e:
             LOGGER.error(f"Error stopping stream: {str(e)}")
             self.statusBar().showMessage(f"Error stopping stream: {str(e)}", 5000)
@@ -685,6 +687,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             self.statusBar().showMessage(f"csv saved at: {os.path.abspath(filename)}", 5000)
 
     def closeEvent(self, event):
+        LOGGER.info("close event invoked.")
         self.system_info_timer.stop()
         self.refresh_rate_timer.stop()
         if self.stream_thread and self.stream_thread.isRunning():

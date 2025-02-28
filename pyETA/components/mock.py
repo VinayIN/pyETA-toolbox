@@ -57,7 +57,7 @@ class MockEyeTracker(Thread):
         self.curr_y = corr_y / self.screen_height
 
     def run(self):
-        self.listener = mouse.Listener(on_move=self.on_move)
+        self.listener = mouse.Listener(on_move=self.on_move, daemon=True)
         self.listener.start()
         while not self.should_stop:
             time.sleep(.99 / self.data_rate)
@@ -87,6 +87,7 @@ class MockEyeTracker(Thread):
         if self.listener and self.listener.is_alive():
             self.listener.stop()
             self.listener.join()
+        self.callbacks.clear()
         self.join()
 
 if __name__ == "__main__":

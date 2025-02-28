@@ -11,6 +11,9 @@ import numpy as np
 import os
 import glob
 import psutil
+import threading
+import signal
+import os
 from pyETA import __datapath__, LOGGER
 
 def get_current_screen_size(screen_index=0):
@@ -227,3 +230,29 @@ class ProcessStatus:
         self.active_processes.clear()
         LOGGER.info("Cleanup complete")
 
+def close_dummy_threads():
+    """
+    Attempts to cleanly terminate threads named 'Dummy-*' by waiting for natural exit.
+    If threads persist beyond the timeout, forces termination using SIGTERM.
+    """
+    current_thread = threading.current_thread()
+    dummy_threads = [t for t in threading.enumerate() if t.name.startswith('Dummy-')]
+    
+    if not dummy_threads:
+        LOGGER.info("No Dummy-* threads found to terminate.")
+        return
+    
+    LOGGER.debug(f"Found {len(dummy_threads)} Dummy-* threads: {[t.name for t in dummy_threads]}")
+
+    for thread in dummy_threads:
+        if thread is not current_thread:
+            if thread.is_alive():
+                LOGGER.debug(f"Forcing termination of thread {thread.name} (ID: {thread.native_id})")
+                try:
+                    os.kill(thread.native_id, signal.SIGTERM)
+                except Exception as e:
+                    LOGGER.error(f"Error forcing termination of thread {thread.name}: {str(e)}")
+            else:
+                LOGGER.warning(f"Thread {thread.name} already terminated before action.")
+    LOGGER.warning(f"Thread count after cleanup: {threading.active_count()}")
+    LOGGER.warning(f"Threads: {[t.name for t in threading.enumerate()]}")

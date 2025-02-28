@@ -40,7 +40,9 @@ class TrackerThread(qtc.QThread):
         """Stop tracker thread."""
         self.running = False
         self.id = None
-        if self.tracker.id: self.tracker.signal_break()
+        if self.tracker and self.tracker.id:
+            self.tracker.signal_break()
+            self.tracker = None
         self.wait()
         self.quit()
         LOGGER.info("Tracker thread stopped!")
@@ -189,6 +191,7 @@ class StreamThread(qtc.QThread):
                     counts = [data['count'] for data in self.fixation_data.values()]
                     self.update_fixation_signal.emit(x_coords, y_coords, counts)
             self.tracker_thread.stop()
+            inlet.close_stream()
                         
         except Exception as e:
             LOGGER.error(f"Stream error: {str(e)}")

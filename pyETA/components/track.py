@@ -326,6 +326,9 @@ class Tracker:
                 self.eyetracker.unsubscribe_from(self.gaze_id, self._collect_gaze_data)
                 if self.use_mock:
                     self.eyetracker.stop()
+                if self.push_stream:
+                    del self.lsl_gaze_outlet
+                    self.lsl_gaze_outlet = None
             else:
                 LOGGER.info("No eye tracker found!")
         except Exception as e:
