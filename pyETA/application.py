@@ -215,7 +215,6 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.system_info_labels["stream id"].setText(f"<strong>Stream Thread ID:</strong> {self.stream_thread.id if self.stream_thread else 'Not Running'}")
         self.system_info_labels["validate id"].setText(f"<strong>Validate Thread ID:</strong> {self.validate_thread.id if self.validate_thread else 'Not Running'}")
         self.system_info_labels["total threads"].setText(f"<strong>Total Threads:</strong> {threading.active_count()}")
-        #LOGGER.info(f"Total Threads: {threading.active_count()}, Ids: {[(thread.name, thread.native_id)  for thread in threading.enumerate()]}")
         self.system_info_labels["runtime"].setText(f"<strong>Runtime:</strong> {runtime}")
         self.system_info_labels["memory"].setText(f"<strong>Memory:</strong> {memory_info.rss / 1024**2:.1f} MB")
         self.system_info_labels["storage"].setText(f"<strong>Storage available:</strong> {storage_free:.1f} GB")
