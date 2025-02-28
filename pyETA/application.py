@@ -76,6 +76,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         # Finalize layout
         layout = qtw.QVBoxLayout(central_widget)
         layout.addWidget(splitter)
+        self.update_status_bar("pyETA status OK", 1, 5000)
 
         self.setStyleSheet("""
             QPushButton:hover {
@@ -84,6 +85,30 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
                 background-color: #2ECC71; 
             }
         """)
+
+    def update_status_bar(self, message, state=3, timeout=5000):
+        """
+        Updates the status bar with a message and changes its color based on the state.
+        
+        0: error
+        1: sucess
+        2: processing
+        3: None
+        Args:
+            message (str): The message to display.
+            state (str): The state of the operation ("processing", "error", "success").
+            timeout (int): Time in milliseconds to display the message.
+        """
+        if state == 2:
+            self.statusBar().setStyleSheet("background-color: #FFFF00;")
+        elif state == 0:
+            self.statusBar().setStyleSheet("background-color: #FF0000;")
+        elif state == 1:
+            self.statusBar().setStyleSheet("background-color: #2ECC71;")
+        else:
+            self.statusBar().setStyleSheet("background-color: none;")
+        self.statusBar().showMessage(message, timeout)
+        qtc.QTimer.singleShot(timeout, lambda: self.statusBar().setStyleSheet("background-color: none;"))
 
     def create_sidebar(self):
         """Create the sidebar with system information and about section"""
@@ -204,7 +229,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.update_metric_tab()
         self.metrics_table.clear()
         eta_utils.close_dummy_threads() # This is a workaround. remove after finding the cause for dummy thread
-        self.statusBar().showMessage("Application refreshed successfully", 5000)
+        self.update_status_bar("Application refreshed successfully", 1, 5000)
     
     def create_stream_configuration(self):
         """
@@ -379,7 +404,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
                 self.validate_thread.start()
                 self.validation_window.show()
 
-                self.statusBar().showMessage("Validation started", 10000)
+                self.update_status_bar("Validation started", 2, 10000)
                 screen_dialog.close()
 
             except Exception as e:
@@ -588,7 +613,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
             self.stream_thread.error_signal.connect(lambda msg: qtw.QMessageBox.critical(self, "Error", msg))
             self.stream_thread.start()
-            self.statusBar().showMessage("Stream started successfully", 3000)
+            self.update_status_bar("Stream started successfully", 1, 3000)
 
         except Exception as e:
             error_msg = f"Failed to start stream: {str(e)}"
@@ -612,7 +637,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         try:
             self.stream_thread.stop()
             self.stream_thread = None
-            self.statusBar().showMessage("Stream stopped successfully", 3000)
+            self.update_status_bar("Stream stopped successfully", 1, 3000)
             self.is_gaze_playing = False
             self.is_fixation_playing = False
             self.gaze_play_btn.setText("Play")
@@ -622,7 +647,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             LOGGER.warning(f"Threads alive: {[t.name for t in threading.enumerate()]}")
         except Exception as e:
             LOGGER.error(f"Error stopping stream: {str(e)}")
-            self.statusBar().showMessage(f"Error stopping stream: {str(e)}", 5000)
+            self.update_status_bar(f"Error stopping stream: {str(e)}", 0, 5000)
 
     def update_plot_label(self, msg="Stream: Not Connected"):
         """update the stream label with the message"""
@@ -650,7 +675,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
 
     def update_metrics_table(self):
         """update the table with metrics calculated from gaze and validate data using `eta_validate:get_statistics()`"""
-        self.statusBar().showMessage("Calculating", 2000)
+        self.update_status_bar("Calculating", 2, 3000)
         self.df = eta_validate.get_statistics(
             gaze_file=self.gaze_data_items[self.gaze_data.currentIndex() - 1],
             validate_file=self.validate_data_items[self.validate_data.currentIndex() - 1])
@@ -666,7 +691,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         
         self.metrics_table.setAlternatingRowColors(True)
         self.metrics_table.resizeColumnsToContents()
-        self.statusBar().showMessage("Metrics generated successfully", 5000)
+        self.update_status_bar("Metrics generated successfully", 1, 5000)
 
     def download_csv(self):
         """
@@ -684,7 +709,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         filename, _ = qtw.QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
         if filename:
             self.df.to_csv(filename, index=False)
-            self.statusBar().showMessage(f"csv saved at: {os.path.abspath(filename)}", 5000)
+            self.update_status_bar(f"csv saved at: {os.path.abspath(filename)}", 5000)
 
     def closeEvent(self, event):
         LOGGER.info("close event invoked.")
