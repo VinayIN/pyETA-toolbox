@@ -114,16 +114,14 @@ class GazeReader:
 
 class StreamThread(qtc.QThread):
     found_signal = qtc.pyqtSignal(str)
-    update_gaze_signal = qtc.pyqtSignal(np.ndarray, np.ndarray, np.ndarray)
-    update_fixation_signal = qtc.pyqtSignal(np.ndarray, np.ndarray, np.ndarray, np.ndarray)
     error_signal = qtc.pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
         self.running = False
         self.id = None
-        self.buffer = deque(maxlen=5000)
-        self.fixation_buffer = deque(maxlen=20)
+        self.buffer = deque(maxlen=8000)
+        self.fixation_buffer = deque(maxlen=30)
         self.current_fixation = None
     
     def set_variables(self, tracker_params):
@@ -160,13 +158,6 @@ class StreamThread(qtc.QThread):
                 gaze_y = int((sample[8] if sample[8] else sample[17]) * screen_height)
                 
                 self.buffer.append((current_time, gaze_x, gaze_y))
-                gaze_array = np.array(list(self.buffer), 
-                                        dtype=[('timestamp', float), ('x', int), ('y', int)])
-                self.update_gaze_signal.emit(
-                    gaze_array['timestamp'],
-                    gaze_array['x'],
-                    gaze_array['y']
-                )
 
                 fixation_time = sample[5] if sample[5] else sample[14]
                 is_fixation = sample[3] or sample[12]
@@ -186,15 +177,6 @@ class StreamThread(qtc.QThread):
                         self.current_fixation['timestamp']
                     ))
                     self.current_fixation = None
-
-                fixation_array = np.array(list(self.fixation_buffer), 
-                                        dtype=[('x', float), ('y', float), ('count', int), ('timestamp', float)])
-                self.update_fixation_signal.emit(
-                    fixation_array['x'],
-                    fixation_array['y'],
-                    fixation_array['count'],
-                    fixation_array['timestamp']
-                )
                 
             self.tracker_thread.stop()
             inlet.close_stream()
@@ -202,6 +184,14 @@ class StreamThread(qtc.QThread):
         except Exception as e:
             LOGGER.error(f"Stream error: {str(e)}")
             self.error_signal.emit(f"Stream error: {str(e)}")
+
+    def get_data(self, fixation=False):
+        if fixation:
+            return np.array(list(self.fixation_buffer), 
+                            dtype=[('x', int), ('y', int), ('count', int), ('timestamp', float)])
+        else:
+            return np.array(list(self.buffer), 
+                            dtype=[('timestamp', float), ('x', int), ('y', int)])
     
     def stop(self):
         self.running = False
