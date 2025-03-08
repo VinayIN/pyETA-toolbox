@@ -106,18 +106,7 @@ _____
 #### 2. GUI
 ##### Command:
 ```bash
-pyETA browser
-```
-##### Parameters:
-- `--debug:` Enables debug mode.
-- `--port:` Specifies the port number for the Dash application.
-
-Example with debug mode and starting at port 8050 (Access it here: http://localhost:8050)
-```bash
-    pyETA browser --debug --port 8050
-```
--------
-##### Command:
-```bash
 pyETA application
 ```
+
+or execute the `pyETA.exe`(To be implemented)
