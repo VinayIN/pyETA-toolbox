@@ -194,8 +194,7 @@ class StreamThread(qtc.QThread):
                     fixation_array['y'],
                     fixation_array['count'],
                     fixation_array['timestamp']
-                )   
-                time.sleep(0.001)
+                )
                 
             self.tracker_thread.stop()
             inlet.close_stream()

@@ -49,7 +49,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         splitter.addWidget(self.sidebar)
         self.system_info_timer = qtc.QTimer()
         self.system_info_timer.timeout.connect(self.update_system_info)
-        self.system_info_timer.start(100)
+        self.system_info_timer.start(1000)
 
         # Main content area
         main_content_widget = qtw.QWidget()
