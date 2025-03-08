@@ -34,7 +34,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
 
         self.plot_timer = qtc.QTimer()
         self.plot_timer.timeout.connect(self.update_plots_from_stream)
-        self.plot_timer.start(300)
+        self.plot_timer.start(500)
 
         # Central widget and main layout
         central_widget = qtw.QWidget()
@@ -48,7 +48,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         splitter.addWidget(self.sidebar)
         self.system_info_timer = qtc.QTimer()
         self.system_info_timer.timeout.connect(self.update_system_info)
-        self.system_info_timer.start(100)
+        self.system_info_timer.start(1000)
 
         # Main content area
         main_content_widget = qtw.QWidget()
@@ -166,8 +166,8 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.refresh_slider = qtw.QSlider(qtc.Qt.Orientation.Horizontal)
         self.refresh_slider.setMinimum(50)
         self.refresh_slider.setMaximum(3000)
-        self.refresh_slider.setValue(300)
-        self.refresh_label = qtw.QLabel("300 ms")
+        self.refresh_slider.setValue(500)
+        self.refresh_label = qtw.QLabel("500 ms")
         self.refresh_slider.valueChanged.connect(self.update_plot_refresh_rate)
         refresh_rate_layout.addWidget(refresh_rate_label)
         refresh_rate_layout.addWidget(self.refresh_slider)
