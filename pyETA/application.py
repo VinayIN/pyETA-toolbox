@@ -456,9 +456,10 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         if not self.stream_thread or not self.stream_thread.isRunning() or not self.start_time or not self.is_gaze_playing:
             return
 
+        self.gaze_plot_x_curve.clear()
+        self.gaze_plot_y_curve.clear()
         current_time = timestamp[-1] - self.start_time
-        refresh_rate = self.refresh_rate_slider.value()
-        window_size = (refresh_rate/1000) * 10
+        window_size = 10
 
         relative_times = timestamp - self.start_time
         mask = relative_times >= (current_time - window_size)
@@ -475,6 +476,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         if not self.stream_thread or not self.stream_thread.isRunning() or not self.start_time or not self.is_fixation_playing:
             return
         
+        self.fixation_plot.clear()
         scatter = pg.ScatterPlotItem(
             x=x_coord,
             y=y_coord,

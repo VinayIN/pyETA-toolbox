@@ -122,8 +122,8 @@ class StreamThread(qtc.QThread):
         super().__init__()
         self.running = False
         self.id = None
-        self.buffer = deque(maxlen=1000)
-        self.fixation_buffer = deque(maxlen=10)
+        self.buffer = deque(maxlen=5000)
+        self.fixation_buffer = deque(maxlen=20)
         self.current_fixation = None
     
     def set_variables(self, tracker_params):
