@@ -590,17 +590,21 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
 
     def update_metrics_table(self):
         self.update_status_bar("Calculating", 2, 3000)
-        self.df = eta_validate.get_statistics(
+        self.df, self.described_df = eta_validate.get_statistics(
             gaze_file=self.gaze_data_items[self.gaze_data.currentIndex() - 1],
             validate_file=self.validate_data_items[self.validate_data.currentIndex() - 1]
         )
-        self.metrics_table.setRowCount(self.df.shape[0])
-        self.metrics_table.setColumnCount(self.df.shape[1])
-        self.metrics_table.setHorizontalHeaderLabels(self.df.columns)
 
-        for row in range(self.df.shape[0]):
-            for col in range(self.df.shape[1]):
-                item = qtw.QTableWidgetItem(str(self.df.iloc[row, col]))
+        separator_row = pd.DataFrame([["---"] * self.df.shape[1]], columns=self.df.columns)
+        combined_df = pd.concat([self.df, separator_row, self.described_df], ignore_index=True)
+
+        self.metrics_table.setRowCount(combined_df.shape[0])
+        self.metrics_table.setColumnCount(combined_df.shape[1])
+        self.metrics_table.setHorizontalHeaderLabels(combined_df.columns)
+
+        for row in range(combined_df.shape[0]):
+            for col in range(combined_df.shape[1]):
+                item = qtw.QTableWidgetItem(str(combined_df.iloc[row, col]))
                 item.setTextAlignment(qtc.Qt.AlignmentFlag.AlignCenter)
                 self.metrics_table.setItem(row, col, item)
         
