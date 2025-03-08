@@ -366,9 +366,6 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         validate_btn.clicked.connect(start_validation)
         layout.addWidget(validate_btn)
         screen_dialog.exec()
-        if self.validate_thread and self.validate_thread.isRunning():
-            self.validate_thread.stop()
-            self.validate_thread = None
     
     def create_gaze_data_tab(self):
         tab = qtw.QWidget()
@@ -575,7 +572,6 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             self.fixation_play_btn.setText("Play")
             self.update_plot_label()
             LOGGER.warning(f"Thread count after stop stream: {threading.active_count()}")
-            LOGGER.warning(f"Threads alive: {[t.name for t in threading.enumerate()]}")
         except Exception as e:
             LOGGER.error(f"Error stopping stream: {str(e)}")
             self.update_status_bar(f"Error stopping stream: {str(e)}", 0, 5000)
@@ -596,7 +592,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         )
 
         separator_row = pd.DataFrame([["---"] * self.df.shape[1]], columns=self.df.columns)
-        combined_df = pd.concat([self.df, separator_row, self.described_df], ignore_index=True)
+        combined_df = pd.concat([self.df, separator_row, self.described_df], ignore_index=True).fillna("")
 
         self.metrics_table.setRowCount(combined_df.shape[0])
         self.metrics_table.setColumnCount(combined_df.shape[1])
@@ -631,7 +627,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         if self.validate_thread and self.validate_thread.isRunning():
             self.validate_thread.stop()
             LOGGER.info("Stopping validate thread during closeEvent")
-        
+        LOGGER.warning(f"Threads alive: {[t.name for t in threading.enumerate()]}")
         event.accept()
 
 

@@ -149,8 +149,10 @@ def get_statistics(gaze_file: str, validate_file: str) -> pd.DataFrame:
     statistics = df_calculated.reset_index(drop=True).groupby("group").apply(calculate_statistics).reset_index(drop=True)
     
     result = statistics.round(4)
-    described = result.describe(percentiles=[0.25, 0.50, 0.75]).loc[['25%', '50%', '75%', 'mean']]
-    return result, described
+    described = result.describe(percentiles=[0.25, 0.50, 0.75]).loc[['25%', '50%', '75%', 'mean']].drop(columns=['group'])
+    described.index.name= 'group'
+
+    return result, described.reset_index().round(4)
 
 def get_gaze_data_timestamp(file: str) -> Optional[datetime.datetime]:
     try:
