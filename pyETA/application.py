@@ -385,7 +385,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
 
         self.gaze_plot_x = pg.PlotWidget(title="Gaze X Position")
         self.gaze_plot_x.showGrid(x=True, y=True)
-        self.gaze_plot_x.setYRange(0, self.size().width())
+        self.gaze_plot_x.setYRange(0, self.screen().size().width())
         self.gaze_plot_x.setLabel('bottom', 'Time (s)')
         self.gaze_plot_x.setLabel('left', 'Pixel Position - Width')
         self.gaze_plot_x_curve = self.gaze_plot_x.plot(pen='b')
@@ -393,7 +393,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
 
         self.gaze_plot_y = pg.PlotWidget(title="Gaze Y Position")
         self.gaze_plot_y.showGrid(x=True, y=True)
-        self.gaze_plot_y.setYRange(0, self.size().height())
+        self.gaze_plot_y.setYRange(0, self.screen().size().height())
         self.gaze_plot_y.setLabel('bottom', 'Time (s)')
         self.gaze_plot_y.setLabel('left', 'Pixel Position - Height')
         self.gaze_plot_y_curve = self.gaze_plot_y.plot(pen='r')
@@ -415,8 +415,8 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         layout.addLayout(control_panel)
 
         self.fixation_plot = pg.PlotWidget(title="Fixation Points")
-        self.fixation_plot.setXRange(0, self.size().width())
-        self.fixation_plot.setYRange(0, self.size().height())
+        self.fixation_plot.setXRange(0, self.screen().size().width())
+        self.fixation_plot.setYRange(0, self.screen().size().height())
         self.fixation_plot.getAxis('left').setLabel('Pixel Position - Height')
         self.fixation_plot.getAxis('bottom').setLabel('Pixel Position - Width')
         self.fixation_plot.invertY(True)
@@ -506,14 +506,13 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.gaze_plot_x.setXRange(max(0, current_time - window_size), current_time)
         self.gaze_plot_y.setXRange(max(0, current_time - window_size), current_time)
 
-    def update_fixation_plot(self, x_coord, y_coord, count, timestamp):
+    def update_fixation_plot(self, x_coord, y_coord, counts, timestamp):
         self.fixation_plot.clear()
         scatter = pg.ScatterPlotItem(
             x=x_coord,
             y=y_coord,
-            size=np.minimum(count, 20),
-            symbol='o',
-            symbolBrush=(255, 0, 0, 150)
+            size = np.minimum(counts, 10),
+            symbol='+'
         )
         self.fixation_plot.addItem(scatter)
 

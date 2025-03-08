@@ -55,8 +55,8 @@ class StreamThread(qtc.QThread):
         super().__init__()
         self.running = False
         self.id = None
-        self.buffer = deque(maxlen=8000)
-        self.fixation_buffer = deque(maxlen=30)
+        self.buffer = deque(maxlen=10000)
+        self.fixation_buffer = deque(maxlen=10)
         self.current_fixation = None
     
     def set_variables(self, tracker_params):
@@ -100,9 +100,8 @@ class StreamThread(qtc.QThread):
                     if self.current_fixation is None:
                         self.current_fixation = {'x': gaze_x, 'y': gaze_y, 'count': 1, 'timestamp': fixation_time}
                     else:
-                        count = self.current_fixation['count']
-                        self.current_fixation['x'] = (self.current_fixation['x'] * count + gaze_x) / (count + 1)
-                        self.current_fixation['y'] = (self.current_fixation['y'] * count + gaze_y) / (count + 1)
+                        self.current_fixation['x'] = gaze_x
+                        self.current_fixation['y'] = gaze_y
                         self.current_fixation['count'] += 1
                 elif self.current_fixation is not None:
                     self.fixation_buffer.append((
