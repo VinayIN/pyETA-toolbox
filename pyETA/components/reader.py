@@ -1,6 +1,6 @@
 import datetime
 import threading
-from collections import defaultdict, deque
+from collections import deque
 from mne_lsl import lsl
 
 from pyETA.components.track import Tracker
@@ -47,13 +47,14 @@ class TrackerThread(qtc.QThread):
         self.quit()
         LOGGER.info("Tracker thread stopped!")
 
+
 class GazeReader:
     def __init__(self):
         """
         Initializes the GazeReader instance.
         """
         self.buffer_times, self.buffer_x, self.buffer_y = [], [], []
-        self.fixation_data = defaultdict(lambda: {'count': 0, 'x': 0, 'y': 0, 'timestamp': None})
+        self.fixation_data = deque(maxlen=1000)
         self.running = True
 
     def read_stream(self, inlet):
@@ -78,11 +79,7 @@ class GazeReader:
                 is_fixation = sample[3] or sample[12]
                 if is_fixation:
                     fixation_time = sample[5] if sample[5] else sample[14]
-                    key = f"{fixation_time}"
-                    self.fixation_data[key]['count'] += 1
-                    self.fixation_data[key]['x'] = gaze_x
-                    self.fixation_data[key]['y'] = gaze_y
-                    self.fixation_data[key]['timestamp'] = datetime.datetime.fromtimestamp(fixation_time)
+                    self.fixation_data.append((gaze_x, gaze_y, 1, datetime.datetime.fromtimestamp(fixation_time)))
 
     def get_data(self, fixation=False):
         """
@@ -92,16 +89,10 @@ class GazeReader:
             fixation (bool): If True, returns fixation data instead of regular gaze data
         """
         if fixation:
-            fixation_points = [
-                (data['x'], data['y'], data['count'])
-                for data in self.fixation_data.values()
-                if data['timestamp'] is not None
-            ]
-            # Clear old fixation data
+            fixation_points = [(x, y, count) for x, y, count, _ in self.fixation_data]
             self.fixation_data.clear()
             return fixation_points
         else:
-            # Return regular gaze data
             times, x, y = self.buffer_times, self.buffer_x, self.buffer_y
             self.buffer_times, self.buffer_x, self.buffer_y = [], [], []
             return times, x, y
@@ -120,6 +111,7 @@ class GazeReader:
         self.buffer_times, self.buffer_x, self.buffer_y = [], [], []
         self.fixation_data.clear()
 
+
 class StreamThread(qtc.QThread):
     found_signal = qtc.pyqtSignal(str)
     update_gaze_signal = qtc.pyqtSignal(np.ndarray, np.ndarray, np.ndarray)
@@ -130,8 +122,8 @@ class StreamThread(qtc.QThread):
         super().__init__()
         self.running = False
         self.id = None
-        self.buffer = deque(maxlen=3000)
-        self.fixation_buffer = deque(maxlen=1000)
+        self.buffer = deque(maxlen=1000)
+        self.fixation_buffer = deque(maxlen=10)
         self.current_fixation = None
     
     def set_variables(self, tracker_params):
@@ -164,24 +156,27 @@ class StreamThread(qtc.QThread):
                 current_time = sample[-2]
                 screen_width, screen_height = sample[-4], sample[-3]
                 
-                # Get the filtered gaze data
                 gaze_x = int((sample[7] if sample[7] else sample[16]) * screen_width)
                 gaze_y = int((sample[8] if sample[8] else sample[17]) * screen_height)
                 
                 self.buffer.append((current_time, gaze_x, gaze_y))
-                gaze_array = np.array(list(self.buffer), dtype=[('timestamp', float), ('x', int), ('y', int)])
-                self.update_gaze_signal.emit(gaze_array['timestamp'], gaze_array['x'], gaze_array['y'])
-                
-                # Process fixation data efficiently
+                gaze_array = np.array(list(self.buffer), 
+                                        dtype=[('timestamp', float), ('x', int), ('y', int)])
+                self.update_gaze_signal.emit(
+                    gaze_array['timestamp'],
+                    gaze_array['x'],
+                    gaze_array['y']
+                )
+
                 fixation_time = sample[5] if sample[5] else sample[14]
                 is_fixation = sample[3] or sample[12]
-
                 if is_fixation and fixation_time:
                     if self.current_fixation is None:
                         self.current_fixation = {'x': gaze_x, 'y': gaze_y, 'count': 1, 'timestamp': fixation_time}
                     else:
-                        self.current_fixation['x'] = gaze_x
-                        self.current_fixation['y'] = gaze_y
+                        count = self.current_fixation['count']
+                        self.current_fixation['x'] = (self.current_fixation['x'] * count + gaze_x) / (count + 1)
+                        self.current_fixation['y'] = (self.current_fixation['y'] * count + gaze_y) / (count + 1)
                         self.current_fixation['count'] += 1
                 elif self.current_fixation is not None:
                     self.fixation_buffer.append((
@@ -191,14 +186,16 @@ class StreamThread(qtc.QThread):
                         self.current_fixation['timestamp']
                     ))
                     self.current_fixation = None
-                    fixation_array = np.array(list(self.fixation_buffer), 
-                                            dtype=[('x', float), ('y', float), ('count', int), ('timestamp', float)])
-                    self.update_fixation_signal.emit(
-                        fixation_array['x'],
-                        fixation_array['y'],
-                        fixation_array['count'],
-                        fixation_array['timestamp']
-                    )
+
+                fixation_array = np.array(list(self.fixation_buffer), 
+                                        dtype=[('x', float), ('y', float), ('count', int), ('timestamp', float)])
+                self.update_fixation_signal.emit(
+                    fixation_array['x'],
+                    fixation_array['y'],
+                    fixation_array['count'],
+                    fixation_array['timestamp']
+                )   
+                time.sleep(0.001)
                 
             self.tracker_thread.stop()
             inlet.close_stream()
@@ -215,4 +212,4 @@ class StreamThread(qtc.QThread):
         self.current_fixation = None
         self.wait()
         self.quit()
-        LOGGER.info("Stream thread stopped!")       
+        LOGGER.info("Stream thread stopped!")

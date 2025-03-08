@@ -87,12 +87,20 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         """)
 
     def update_status_bar(self, message, state=3, timeout=5000):
+        """
+        Updates the status bar with the given message and state.
+
+        0: Error (Red)
+        1: Success (Green)
+        2: Processing (Yellow)
+        3: Default (None)
+        """
         if state == 2:
-            self.statusBar().setStyleSheet("background-color: #FFFF00;")
+            self.statusBar().setStyleSheet("background-color: #FFFF00; color: black;")
         elif state == 0:
-            self.statusBar().setStyleSheet("background-color: #FF0000;")
+            self.statusBar().setStyleSheet("background-color: #FF0000; color: white;")
         elif state == 1:
-            self.statusBar().setStyleSheet("background-color: #2ECC71;")
+            self.statusBar().setStyleSheet("background-color: #2ECC71; color: black;")
         else:
             self.statusBar().setStyleSheet("background-color: none;")
         self.statusBar().showMessage(message, timeout)
@@ -152,25 +160,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         system_buttons.addWidget(exit_button)
         system_buttons.addWidget(refresh_button)
 
-        # Add Refresh Rate Slider (0.1 to 3 seconds)
-        refresh_rate_layout = qtw.QHBoxLayout()
-        refresh_rate_label = qtw.QLabel("Refresh Rate (s):")
-        self.refresh_rate_slider = qtw.QSlider(qtc.Qt.Orientation.Horizontal)
-        self.refresh_rate_slider.setMinimum(100)
-        self.refresh_rate_slider.setMaximum(3000)
-        self.refresh_rate_slider.setValue(500)
-        self.refresh_rate_label = qtw.QLabel("0.5 s")
-        self.refresh_rate_slider.valueChanged.connect(
-            lambda value: self.refresh_rate_label.setText(f"{value / 1000:.1f} s")
-        )
-        self.refresh_rate_slider.valueChanged.connect(self.adjust_refresh_rate)
-        refresh_rate_layout.addWidget(refresh_rate_label)
-        refresh_rate_layout.addWidget(self.refresh_rate_slider)
-        refresh_rate_layout.addWidget(self.refresh_rate_label)
-
         layout.addLayout(system_buttons)
-        layout.setSpacing(5)
-        layout.addLayout(refresh_rate_layout)
         layout.setSpacing(5)
 
         self.system_info_labels = {
@@ -411,6 +401,9 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.fixation_plot = pg.PlotWidget(title="Fixation Points")
         self.fixation_plot.setXRange(0, self.size().width())
         self.fixation_plot.setYRange(0, self.size().height())
+        self.fixation_plot.getAxis('left').setLabel('Pixel Position - Height')
+        self.fixation_plot.getAxis('bottom').setLabel('Pixel Position - Width')
+        self.fixation_plot.invertY(True)
         layout.addWidget(self.fixation_plot)
         
         return tab
@@ -459,22 +452,15 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
 
         return tab
 
-    def adjust_refresh_rate(self, value):
-        refresh_rate = value
-        LOGGER.info(f"Adjusted plot refresh rate to {refresh_rate:.1f} Hz")
-
-    def update_gaze_plot(self, timestamp: np.ndarray, x_coord: np.ndarray, y_coord: np.ndarray):
-        if not self.is_gaze_playing:
+    def update_gaze_plot(self, timestamp, x_coord, y_coord):
+        if not self.stream_thread or not self.stream_thread.isRunning() or not self.start_time or not self.is_gaze_playing:
             return
 
-        # Get current time and refresh rate
         current_time = timestamp[-1] - self.start_time
         refresh_rate = self.refresh_rate_slider.value()
         window_size = (refresh_rate/1000) * 10
 
         relative_times = timestamp - self.start_time
-
-        # Filter data for the sliding window
         mask = relative_times >= (current_time - window_size)
         filtered_times = relative_times[mask]
         filtered_x = x_coord[mask]
@@ -485,14 +471,14 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.gaze_plot_x.setXRange(max(0, current_time - window_size), current_time)
         self.gaze_plot_y.setXRange(max(0, current_time - window_size), current_time)
 
-    def update_fixation_plot(self, x_coords: np.ndarray, y_coords: np.ndarray, counts: np.ndarray):
-        if not self.is_fixation_playing:
+    def update_fixation_plot(self, x_coord, y_coord, count, timestamp):
+        if not self.stream_thread or not self.stream_thread.isRunning() or not self.start_time or not self.is_fixation_playing:
             return
-
+        
         scatter = pg.ScatterPlotItem(
-            x=x_coords,
-            y=y_coords,
-            size=np.minimum(counts, 30),
+            x=x_coord,
+            y=y_coord,
+            size=np.minimum(count, 30),
             symbol='o',
             symbolBrush=(255, 0, 0, 150)
         )
@@ -526,6 +512,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         }
         
         try:
+            self.update_status_bar("Stream: Connecting...", 2, 2000)
             self.start_time = datetime.datetime.now().timestamp()
             self.stream_thread = StreamThread()
             self.stream_thread.set_variables(tracker_params=tracker_params)
@@ -534,7 +521,6 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             self.stream_thread.update_fixation_signal.connect(self.update_fixation_plot)
             self.stream_thread.error_signal.connect(lambda msg: qtw.QMessageBox.critical(self, "Error", msg))
             self.stream_thread.start()
-            self.update_status_bar("Stream started successfully", 1, 3000)
 
         except Exception as e:
             error_msg = f"Failed to start stream: {str(e)}"
@@ -565,6 +551,10 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
     def update_plot_label(self, msg="Stream: Not Connected"):
         self.gaze_stream_label.setText(msg)
         self.fixation_stream_label.setText(msg)
+        if "✔" in msg:
+            self.update_status_bar("Stream connected successfully", 1, 5000)
+        if "✘" in msg:
+            self.update_status_bar("Stream connection failed", 0, 5000)
 
     def update_metrics_table(self):
         self.update_status_bar("Calculating", 2, 3000)
