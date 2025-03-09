@@ -5,7 +5,7 @@ from pyETA.components.window import main as main_window
 from pyETA.components.validate import main as main_validate
 
 @click.group()
-@click.version_option()
+@click.version_option(package_name="pyETA-toolbox")
 def main():
     pass
 

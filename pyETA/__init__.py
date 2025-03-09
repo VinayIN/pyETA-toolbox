@@ -3,7 +3,7 @@ import logging
 import logging.handlers
 import os
 
-__version__ = version('pyETA')
+__version__ = version("pyETA-toolbox")
 __datapath__ = os.path.join(os.getcwd(), 'eta_data')
 CONSOLE_LOG_FORMAT = '%(asctime)s :: %(filename)s:%(lineno)d :: %(levelname)s :: %(message)s'
 LOG_FORMAT = '%(asctime)s :: %(name)s:%(filename)s:%(funcName)s:%(lineno)d :: %(levelname)s :: %(message)s'
