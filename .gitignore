@@ -9,3 +9,6 @@
 **/docs
 **/*.log
 **/.DS_Store
+**/*.log
+**/*.log.*
+**/*.spec
