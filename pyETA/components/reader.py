@@ -1,4 +1,3 @@
-import datetime
 import threading
 from collections import deque
 from mne_lsl import lsl
@@ -7,7 +6,6 @@ from pyETA.components.track import Tracker
 from pyETA import LOGGER
 import PyQt6.QtCore as qtc
 import numpy as np
-import time
 
 
 class TrackerThread(qtc.QThread):
