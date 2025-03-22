@@ -1,16 +1,15 @@
-import warnings
+
 import sys
 import math
 import platform
 import datetime
-import multiprocessing
 from typing import List, Optional
 import PyQt6.QtWidgets as qtw
 import PyQt6.QtGui as qtg
 import numpy as np
 import os
 import glob
-import psutil
+import os
 from pyETA import __datapath__, LOGGER
 
 def get_current_screen_size(screen_index=0):
@@ -166,64 +165,3 @@ def get_file_names(prefix, directory=None):
     if os.path.exists(directory):
         return glob.glob(os.path.join(directory, f'{prefix}*'))
     return []
-
-
-class ProcessStatus:
-    """Class to maintain process status and error information"""
-    def __init__(self):
-        self.active_processes = {}
-    
-    def add_process(self, pid, process):
-        self.active_processes[pid] = {
-            'process': process,
-            'start_time': datetime.datetime.now(),
-            'status': 'starting',
-            'last_error': None,
-            'last_update': datetime.datetime.now()
-        }
-    
-    def remove_process(self, pid):
-        if pid in self.active_processes:
-            del self.active_processes[pid]
-    
-    def update_status(self, pid, status, error=None):
-        if pid in self.active_processes:
-            self.active_processes[pid].update({
-                'status': status,
-                'last_error': error,
-                'last_update': datetime.datetime.now()
-            })
-
-    def get_process_info(self, pid):
-        return self.active_processes.get(pid)
-    
-    def cleanup(self):
-        LOGGER.info("Cleaning up initiated!")
-        for pid in self.active_processes.keys():
-            try:
-                process = psutil.Process(pid)
-                LOGGER.info(f"Terminating process {pid}")
-                process.terminate()
-                try:
-                    process.wait(timeout=1)
-                except psutil.TimeoutExpired:
-                    LOGGER.warning(f"Process {pid} did not terminate within timeout, forcing kill")
-                    process.kill()
-            except psutil.NoSuchProcess:
-                LOGGER.info(f"Process {pid} already terminated")
-            except Exception as e:
-                LOGGER.error(f"Error cleaning up process {pid}: {str(e)}")
-        for p in multiprocessing.active_children():
-            try:
-                LOGGER.info(f"Terminating child process {p.pid}")
-                p.terminate()
-                p.join(timeout=1)
-                if p.is_alive():
-                    LOGGER.warning(f"Force killing process {p.pid}")
-                    p.kill()
-                    p.join()
-            except Exception as e:
-                LOGGER.error(f"Error during cleanup process {p.pid}: {str(e)}")
-        self.active_processes.clear()
-        LOGGER.info("Cleanup complete")
-

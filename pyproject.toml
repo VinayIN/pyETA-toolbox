@@ -17,7 +17,7 @@ dash = "^2.18.1"
 numpy = "^2.2.2"
 pandas = "^2.2.3"
 pylsl = "^1.17.6"
-mne-lsl = "^1.8.0"
+mne-lsl = "1.6.0"
 pyqt6 = "^6.8.0"
 pynput = "^1.7.7"
 dash-bootstrap-components = "^1.6.0"
@@ -28,6 +28,7 @@ tobii-research = "1.11.0"
 pytest = "^8.3.3"
 ipython = "^8.31.0"
 pytest-asyncio = "^0.24.0"
+pyinstaller = "^6.12.0"
 
 [tool.pytest.ini_options]
 testpaths = ["pyETA-toolbox/tests"]
