@@ -218,12 +218,11 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.system_info_labels["cpu"].setText(f"<strong>CPU Usage:</strong> {cpu_percent:.1f}%")
 
     def refresh_application(self):
-        self.gaze_plot_x_curve.clear()
-        self.gaze_plot_y_curve.clear()
-        self.fixation_plot.clear()
+        self.gaze_plot_x_curve.setData([], [])
+        self.gaze_plot_y_curve.setData([], [])
+        self.fixation_scatter.setData([], [])
         self.update_metric_tab()
         self.metrics_table.clear()
-        eta_utils.close_dummy_threads()  # Workaround, remove after fixing dummy thread issue
         self.update_status_bar("Application refreshed successfully", 1, 5000)
     
     def create_stream_configuration(self):
@@ -417,8 +416,9 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.fixation_plot.getAxis('left').setLabel('Pixel Position - Height')
         self.fixation_plot.getAxis('bottom').setLabel('Pixel Position - Width')
         self.fixation_plot.invertY(True)
+        self.fixation_scatter = pg.ScatterPlotItem()
+        self.fixation_plot.addItem(self.fixation_scatter)
         layout.addWidget(self.fixation_plot)
-        
         return tab
     
     def toggle_gaze_play(self):
@@ -487,8 +487,6 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
                 self.update_fixation_plot(x_coord, y_coord, count, timestamp)
 
     def update_gaze_plot(self, timestamp, x_coord, y_coord):
-        self.gaze_plot_x_curve.clear()
-        self.gaze_plot_y_curve.clear()
         current_time = timestamp[-1] - self.start_time
         window_size = 10
 
@@ -504,14 +502,12 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.gaze_plot_y.setXRange(max(0, current_time - window_size), current_time)
 
     def update_fixation_plot(self, x_coord, y_coord, counts, timestamp):
-        self.fixation_plot.clear()
-        scatter = pg.ScatterPlotItem(
+        self.fixation_scatter.setData(
             x=x_coord,
             y=y_coord,
             size = np.minimum(counts, 10),
             symbol='+'
         )
-        self.fixation_plot.addItem(scatter)
 
     def update_metric_tab(self):
         self.gaze_data_items, self.validate_data_items = self.get_gaze_and_validate_data()
