@@ -142,15 +142,15 @@ def degree_to_phase(degree):
         degree += 360
     return degree * math.pi / 180
 
-def get_actual_from_relative(relative, screen_width, screen_height):
+def get_actual_from_relative(relative, screen_width, screen_height, dtype='int'):
     pixel_x = relative[0]*screen_width
     pixel_y = relative[1]*screen_height
-    return int(pixel_x), int(pixel_y)
+    return (pixel_x, pixel_y) if dtype == 'float' else (int(pixel_x), int(pixel_y))
 
 def get_relative_from_actual(actual, screen_width, screen_height):
     pixel_x = actual[0]/screen_width
     pixel_y = actual[1]/screen_height
-    return pixel_x, pixel_y
+    return (pixel_x, pixel_y)
 
 def get_distance(point1, point2):
     return math.sqrt((point1[0]-point2[0])**2 + (point1[1]-point2[1])**2)

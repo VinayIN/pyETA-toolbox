@@ -5,11 +5,13 @@ description = "This toolbox provides a realtime visualization of eye tracking da
 authors = ["Binay Kumar Pradhan <bpradhan.asli@gmail.com>"]
 readme = "README.md"
 license = "GPL-3.0"
+documentation = "https://vinayin.gitbook.io/pyeta/"
 repository = "https://github.com/VinayIN/pyETA-toolbox.git"
 keywords = ["eyetracker", "tobii", "mock tobii", "passiveBCI", "real-time eye tracking", "tobii-research"]
 packages = [
     { include = "pyETA" }
 ]
+
 
 [tool.poetry.dependencies]
 python = ">=3.10, <3.11"
