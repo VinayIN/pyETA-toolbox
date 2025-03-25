@@ -169,10 +169,10 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         refresh_rate_layout = qtw.QHBoxLayout()
         refresh_rate_label = qtw.QLabel("Refresh Rate (ms):")
         self.refresh_slider = qtw.QSlider(qtc.Qt.Orientation.Horizontal)
-        self.refresh_slider.setMinimum(50)
-        self.refresh_slider.setMaximum(3000)
-        self.refresh_slider.setValue(500)
-        self.refresh_label = qtw.QLabel("500 ms")
+        self.refresh_slider.setMinimum(10)
+        self.refresh_slider.setMaximum(1000)
+        self.refresh_slider.setValue(200)
+        self.refresh_label = qtw.QLabel("200 ms")
         self.refresh_slider.valueChanged.connect(self.update_plot_refresh_rate)
         refresh_rate_layout.addWidget(refresh_rate_label)
         refresh_rate_layout.addWidget(self.refresh_slider)
@@ -259,13 +259,13 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         velocity_threshold_layout = qtw.QHBoxLayout()
         velocity_threshold_label = qtw.QLabel("Velocity Threshold:")
         self.velocity_threshold_spinbox = qtw.QDoubleSpinBox()
-        self.velocity_threshold_spinbox.setRange(0.0, 5.0)
-        self.velocity_threshold_spinbox.setValue(1.5)
+        self.velocity_threshold_spinbox.setRange(0.0, 50.0)
+        self.velocity_threshold_spinbox.setValue(5.0)
         self.velocity_threshold_spinbox.setSingleStep(0.1)
         self.velocity_threshold_spinbox.valueChanged.connect(
             lambda value: self.velocity_threshold_label.setText(f"{value:.1f}")
         )
-        self.velocity_threshold_label = qtw.QLabel("1.5")
+        self.velocity_threshold_label = qtw.QLabel("50.0")
         velocity_threshold_layout.addWidget(velocity_threshold_label)
         velocity_threshold_layout.addWidget(self.velocity_threshold_spinbox)
         velocity_threshold_layout.addWidget(self.velocity_threshold_label)
@@ -390,7 +390,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.gaze_plot_x.setYRange(0, self.screen().size().width())
         self.gaze_plot_x.setLabel('bottom', 'Time (s)')
         self.gaze_plot_x.setLabel('left', 'Pixel Position - Width')
-        self.gaze_plot_x_curve = self.gaze_plot_x.plot(pen='b')
+        self.gaze_plot_x_curve = self.gaze_plot_x.plot(pen='y')
         layout.addWidget(self.gaze_plot_x)
 
         self.gaze_plot_y = pg.PlotWidget(title="Gaze Y Position")
@@ -511,8 +511,8 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.fixation_scatter.setData(
             x=x_coord,
             y=y_coord,
-            size = np.minimum(counts, 10),
-            symbol='+'
+            size = np.minimum(counts/10, 50),
+            symbol='o'
         )
 
     def update_metric_tab(self):
@@ -587,7 +587,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             self.update_status_bar("Stream connection failed", 0, 5000)
 
     def update_metrics_table(self):
-        self.update_status_bar("Calculating", 2, 3000)
+        self.update_status_bar("Calculating", 2, 5000)
         self.combined_df, df, described_df = eta_validate.get_statistics(
             gaze_file=self.gaze_data_items[self.gaze_data.currentIndex() - 1],
             validate_file=self.validate_data_items[self.validate_data.currentIndex() - 1]
@@ -606,7 +606,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         
         self.metrics_table.setAlternatingRowColors(True)
         self.metrics_table.resizeColumnsToContents()
-        self.update_status_bar("Metrics generated successfully", 1, 5000)
+        self.update_status_bar("Metrics generated successfully", 1, 8000)
 
     def download_csv(self):
         if self.combined_df.empty:
