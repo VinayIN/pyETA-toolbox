@@ -6,6 +6,7 @@ __version__ = version("pyETA-toolbox")
 __datapath__ = os.path.join(os.getcwd(), 'eta_data')
 CONSOLE_LOG_FORMAT = '%(asctime)s :: %(filename)s:%(lineno)d :: %(levelname)s :: %(message)s'
 LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.DEBUG)
 
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)

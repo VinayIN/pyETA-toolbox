@@ -588,21 +588,19 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
 
     def update_metrics_table(self):
         self.update_status_bar("Calculating", 2, 3000)
-        self.df, self.described_df = eta_validate.get_statistics(
+        self.combined_df, df, described_df = eta_validate.get_statistics(
             gaze_file=self.gaze_data_items[self.gaze_data.currentIndex() - 1],
             validate_file=self.validate_data_items[self.validate_data.currentIndex() - 1]
         )
+        LOGGER.info(f"Combined DataFrame: {self.combined_df.shape}, Grid DataFrame: {df.shape}, Described DataFrame: {described_df.shape}")
 
-        separator_row = pd.DataFrame([["---"] * self.df.shape[1]], columns=self.df.columns)
-        combined_df = pd.concat([self.df, separator_row, self.described_df], ignore_index=True).fillna("")
+        self.metrics_table.setRowCount(self.combined_df.shape[0])
+        self.metrics_table.setColumnCount(self.combined_df.shape[1])
+        self.metrics_table.setHorizontalHeaderLabels(self.combined_df.columns)
 
-        self.metrics_table.setRowCount(combined_df.shape[0])
-        self.metrics_table.setColumnCount(combined_df.shape[1])
-        self.metrics_table.setHorizontalHeaderLabels(combined_df.columns)
-
-        for row in range(combined_df.shape[0]):
-            for col in range(combined_df.shape[1]):
-                item = qtw.QTableWidgetItem(str(combined_df.iloc[row, col]))
+        for row in range(self.combined_df.shape[0]):
+            for col in range(self.combined_df.shape[1]):
+                item = qtw.QTableWidgetItem(str(self.combined_df.iloc[row, col]))
                 item.setTextAlignment(qtc.Qt.AlignmentFlag.AlignCenter)
                 self.metrics_table.setItem(row, col, item)
         
@@ -611,13 +609,13 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.update_status_bar("Metrics generated successfully", 1, 5000)
 
     def download_csv(self):
-        if self.df.empty:
+        if self.combined_df.empty:
             qtw.QMessageBox.critical(self, "Error", "No data to save as CSV")
             return
         
         filename, _ = qtw.QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
         if filename:
-            self.df.to_csv(filename, index=False)
+            self.combined_df.to_csv(filename, index=False)
             self.update_status_bar(f"csv saved at: {os.path.abspath(filename)}", 1, 5000)
 
     def closeEvent(self, event):
