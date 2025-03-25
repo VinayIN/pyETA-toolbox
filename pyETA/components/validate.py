@@ -140,8 +140,11 @@ def get_statistics(gaze_file: str, validate_file: str) -> pd.DataFrame:
     result = statistics.round(4)
     described = result.describe(percentiles=[0.25, 0.50, 0.75]).loc[['25%', '50%', '75%', 'mean']].drop(columns=['group'])
     described.index.name= 'group'
-
-    return result, described.reset_index().round(4)
+    described = described.reset_index().round(4)
+    
+    separator_row = pd.DataFrame([["---"] * result.shape[1]], columns=result.columns)
+    combined = pd.concat([result, separator_row, described], ignore_index=True).fillna("")
+    return combined, result, described
 
 def get_gaze_data_timestamp(file: str) -> Optional[datetime.datetime]:
     try:
@@ -190,10 +193,10 @@ def main(csv: Optional[str]):
         sys.exit(1)
 
     # Process and save to CSV
-    result, described = get_statistics(gaze_file=gaze_file, validate_file=validate_file)
+    combined, result, described = get_statistics(gaze_file=gaze_file, validate_file=validate_file)
     if csv is None:
         print(described)
-    result.to_csv(csv, index=False)
+    combined.to_csv(csv, index=False)
     print(f"Results saved to {csv}")
 
 if __name__ == "__main__":
