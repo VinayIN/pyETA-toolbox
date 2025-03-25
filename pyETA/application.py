@@ -113,22 +113,27 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         title.setStyleSheet("color: gray; margin-bottom: 10px;")
         layout.addWidget(title)
 
-        faculty_info = qtw.QLabel(
-            """<h3 style='color: #555;'>Faculty 1</h3>
-            <a href='https://www.b-tu.de/en/fg-neuroadaptive-hci/' style='text-decoration: none;' target='_blank'>
-                <strong> Neuroadaptive Human-Computer Interaction</strong><br>
+        self.source_code_link = qtw.QTextBrowser()
+        self.source_code_link.setOpenExternalLinks(True)
+        self.source_code_link.setReadOnly(True)
+        self.source_code_link.setHtml(
+            """
+            <h3 style='color: #555;'>Faculty 1</h3>
+            <a href='https://www.b-tu.de/en/fg-neuroadaptive-hci/' style='text-decoration: none;'>
+                <strong>Neuroadaptive Human-Computer Interaction</strong><br>
                 Brandenburg University of Technology (Cottbus-Senftenberg)
-            </a>"""
-        )
-        faculty_info.setStyleSheet("margin-bottom: 20px;")
-        layout.addWidget(faculty_info)
-
-        source_code_link = qtw.QLabel(
-            """<h3 style='color: #555;'>Source code</h3>
+            </a>
+            <h3 style='color: #555;'>Source code</h3>
             <a href='https://github.com/VinayIN/EyeTrackerAnalyzer.git' style='text-decoration: none;' target='_blank'>
                 https://github.com/VinayIN/EyeTrackerAnalyzer.git
-            </a>"""
+            </a>
+            <h3 style='color: #555;'>Documentation</h3>
+            <a href='https://vinayin.gitbook.io/pyeta/' style='text-decoration: none;' target='_blank'>
+                https://vinayin.gitbook.io/pyeta
+            """
         )
+        self.source_code_link.setStyleSheet("margin-bottom: 20px; background: transparent;")
+        self.source_code_link.anchorClicked.connect(lambda url: qtg.QDesktopServices.openUrl(url))
 
         markdown_text = qtw.QLabel(
             f"""<p>pyETA, Version: <code>{__version__}</code></p>
@@ -141,7 +146,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             </ul>"""
         )
         layout.addWidget(markdown_text)
-        layout.addWidget(source_code_link)
+        layout.addWidget(self.source_code_link)
 
         self.system_info_card = self.create_system_info_card()
         layout.addWidget(self.system_info_card)
@@ -218,6 +223,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.system_info_labels["cpu"].setText(f"<strong>CPU Usage:</strong> {cpu_percent:.1f}%")
 
     def refresh_application(self):
+        self.source_code_link.clearFocus()
         self.gaze_plot_x_curve.setData([], [])
         self.gaze_plot_y_curve.setData([], [])
         self.fixation_scatter.setData([], [])
