@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pyETA-toolbox"
-version = "0.0.9.dev1"
+version = "0.1.0"
 description = "This toolbox provides a realtime visualization of eye tracking data to be used for designing passive BCI system."
 authors = ["Binay Kumar Pradhan <bpradhan.asli@gmail.com>"]
 readme = "README.md"

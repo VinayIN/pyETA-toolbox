@@ -169,10 +169,10 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         refresh_rate_layout = qtw.QHBoxLayout()
         refresh_rate_label = qtw.QLabel("Refresh Rate (ms):")
         self.refresh_slider = qtw.QSlider(qtc.Qt.Orientation.Horizontal)
-        self.refresh_slider.setMinimum(50)
-        self.refresh_slider.setMaximum(3000)
-        self.refresh_slider.setValue(500)
-        self.refresh_label = qtw.QLabel("500 ms")
+        self.refresh_slider.setMinimum(10)
+        self.refresh_slider.setMaximum(1000)
+        self.refresh_slider.setValue(200)
+        self.refresh_label = qtw.QLabel("200 ms")
         self.refresh_slider.valueChanged.connect(self.update_plot_refresh_rate)
         refresh_rate_layout.addWidget(refresh_rate_label)
         refresh_rate_layout.addWidget(self.refresh_slider)
@@ -259,13 +259,13 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         velocity_threshold_layout = qtw.QHBoxLayout()
         velocity_threshold_label = qtw.QLabel("Velocity Threshold:")
         self.velocity_threshold_spinbox = qtw.QDoubleSpinBox()
-        self.velocity_threshold_spinbox.setRange(0.0, 5.0)
-        self.velocity_threshold_spinbox.setValue(1.5)
+        self.velocity_threshold_spinbox.setRange(0.0, 50.0)
+        self.velocity_threshold_spinbox.setValue(5.0)
         self.velocity_threshold_spinbox.setSingleStep(0.1)
         self.velocity_threshold_spinbox.valueChanged.connect(
             lambda value: self.velocity_threshold_label.setText(f"{value:.1f}")
         )
-        self.velocity_threshold_label = qtw.QLabel("1.5")
+        self.velocity_threshold_label = qtw.QLabel("50.0")
         velocity_threshold_layout.addWidget(velocity_threshold_label)
         velocity_threshold_layout.addWidget(self.velocity_threshold_spinbox)
         velocity_threshold_layout.addWidget(self.velocity_threshold_label)
@@ -511,8 +511,8 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.fixation_scatter.setData(
             x=x_coord,
             y=y_coord,
-            size = np.minimum(counts, 10),
-            symbol='+'
+            size = np.minimum(counts/10, 50),
+            symbol='o'
         )
 
     def update_metric_tab(self):
