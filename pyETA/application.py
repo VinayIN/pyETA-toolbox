@@ -390,7 +390,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         self.gaze_plot_x.setYRange(0, self.screen().size().width())
         self.gaze_plot_x.setLabel('bottom', 'Time (s)')
         self.gaze_plot_x.setLabel('left', 'Pixel Position - Width')
-        self.gaze_plot_x_curve = self.gaze_plot_x.plot(pen='b')
+        self.gaze_plot_x_curve = self.gaze_plot_x.plot(pen='y')
         layout.addWidget(self.gaze_plot_x)
 
         self.gaze_plot_y = pg.PlotWidget(title="Gaze Y Position")
@@ -587,7 +587,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
             self.update_status_bar("Stream connection failed", 0, 5000)
 
     def update_metrics_table(self):
-        self.update_status_bar("Calculating", 2, 3000)
+        self.update_status_bar("Calculating", 2, 5000)
         self.combined_df, df, described_df = eta_validate.get_statistics(
             gaze_file=self.gaze_data_items[self.gaze_data.currentIndex() - 1],
             validate_file=self.validate_data_items[self.validate_data.currentIndex() - 1]
@@ -606,7 +606,7 @@ class EyeTrackerAnalyzer(qtw.QMainWindow):
         
         self.metrics_table.setAlternatingRowColors(True)
         self.metrics_table.resizeColumnsToContents()
-        self.update_status_bar("Metrics generated successfully", 1, 5000)
+        self.update_status_bar("Metrics generated successfully", 1, 8000)
 
     def download_csv(self):
         if self.combined_df.empty:
