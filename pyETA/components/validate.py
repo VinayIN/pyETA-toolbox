@@ -37,8 +37,8 @@ def calculate_statistics(df: pd.DataFrame) -> pd.DataFrame:
         "distance (target to gaze points)": (df["distance_left_from_target"].mean() + df["distance_right_from_target"].mean())/2,
         "spread (target to gaze points)": (df["distance_left_from_target"].std() + df["distance_right_from_target"].std())/2,
         "mean gaze point": (mean_data_x, mean_data_y),
-        "distance (mean to target)": eta_utils.get_distance((mean_data_x, mean_data_y), target),
-        "distance (mean to gaze points)": (df["distance_left_from_mean"].mean() + df["distance_right_from_mean"].mean())/2,
+        "distance (mean to target) / accuracy": eta_utils.get_distance((mean_data_x, mean_data_y), target),
+        "distance (mean to gaze points) / precision": (df["distance_left_from_mean"].mean() + df["distance_right_from_mean"].mean())/2,
         "spread (mean to gaze points)": (df["distance_left_from_mean"].std() + df["distance_right_from_mean"].std())/2,
     }
     return pd.DataFrame(data = [result])
