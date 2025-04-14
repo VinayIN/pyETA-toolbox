@@ -1,45 +1,69 @@
-[tool.poetry]
+[build-system]
+requires = [
+    "setuptools==78.1.0",
+    "setuptools_scm==8.2.0",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
 name = "pyETA-toolbox"
 version = "0.1.0"
 description = "This toolbox provides a realtime visualization of eye tracking data to be used for designing passive BCI system."
-authors = ["Binay Kumar Pradhan <bpradhan.asli@gmail.com>"]
+authors = [
+    {name = "Binay Kumar Pradhan", email = "bpradhan.asli@gmail.com"}
+]
 readme = "README.md"
-license = "GPL-3.0"
-documentation = "https://vinayin.gitbook.io/pyeta/"
-repository = "https://github.com/VinayIN/pyETA-toolbox.git"
+license = { text = "GPL-3.0" }
+
 keywords = ["eyetracker", "tobii", "mock tobii", "passiveBCI", "real-time eye tracking", "tobii-research"]
-packages = [
-    { include = "pyETA" }
+requires-python = "==3.10.*"
+
+dependencies = [
+    "numpy >=2.2.2",
+    "pandas >=2.2.3",
+    "pylsl >=1.17.6",
+    "mne-lsl ==1.6.0",
+    "pyqt6 >=6.8.0",
+    "pynput >=1.7.7",
+    "click >=8.1.8",
+    #"tobii-research ==1.11.0"
 ]
 
+# Development dependencies
+[project.optional-dependencies]
+dev = [
+    "pytest >= 8.3.3",
+    "ipython >= 8.31.0",
+    "pytest-asyncio >= 0.24.0",
+    "briefcase >= 0.3.16"
+]
 
-[tool.poetry.dependencies]
-python = ">=3.10, <3.11"
-numpy = "^2.2.2"
-pandas = "^2.2.3"
-pylsl = "^1.17.6"
-mne-lsl = "1.6.0"
-pyqt6 = "^6.8.0"
-pynput = "^1.7.7"
-click = "^8.1.8"
-tobii-research = "1.11.0"
+[project.urls]
+Homepage = "https://github.com/VinayIN/pyETA-toolbox.git"
+Documentation = "https://vinayin.gitbook.io/pyeta/"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.3"
-ipython = "^8.31.0"
-pytest-asyncio = "^0.24.0"
-pyinstaller = "^6.12.0"
+[project.scripts]
+pyETA = "pyETA.cli:main"
 
+# Briefcase-specific configuration
+[tool.briefcase]
+project_name = "pyETA"
+bundle = "com.vinayin.pyeta"
+
+[tool.briefcase.app.pyETA]
+sources = ["pyETA"]
+icon = "pyETA/resources/icon"
+
+[tool.briefcase.app.pyETA.macOS]
+universal_build = true
+
+[tool.briefcase.app.pyETA.windows]
+universal_build = true
+
+# Testing configuration
 [tool.pytest.ini_options]
-testpaths = ["pyETA-toolbox/tests"]
+testpaths = ["tests"]
 log_cli = true
 log_cli_level = "INFO"
 log_file_format = "%(asctime)s :: %(name)s:%(filename)s:%(lineno)d :: %(levelname)s :: %(message)s"
 log_file = "eta_data/test.log"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.scripts]
-pyETA = "pyETA.cli:main"

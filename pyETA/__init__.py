@@ -1,9 +1,16 @@
-from importlib.metadata import version
+from importlib.metadata import version, PackageNotFoundError
 import logging
 import os
 
-__version__ = version("pyETA-toolbox")
-__datapath__ = os.path.join(os.getcwd(), 'eta_data')
+try:
+    __version__ = version("pyETA-toolbox")
+except PackageNotFoundError:
+    __version__ = "0.1.0"
+
+__datapath__ = os.path.join(os.path.join(os.path.expanduser("~/Documents"), "pyETA"), "eta_data")
+
+os.makedirs(__datapath__, exist_ok=True)
+
 CONSOLE_LOG_FORMAT = '%(asctime)s :: %(filename)s:%(lineno)d :: %(levelname)s :: %(message)s'
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
