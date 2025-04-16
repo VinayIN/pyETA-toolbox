@@ -5,7 +5,7 @@ import os
 try:
     __version__ = version("pyETA-toolbox")
 except PackageNotFoundError:
-    __version__ = "0.1.0"
+    __version__ = "0.1.1"
 
 __datapath__ = os.path.join(os.path.join(os.path.expanduser("~/Documents"), "pyETA"), "eta_data")
 

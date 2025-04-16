@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyETA-toolbox"
-version = "0.1.0"
+version = "0.1.1"
 description = "This toolbox provides a realtime visualization of eye tracking data to be used for designing passive BCI system."
 authors = [
     {name = "Binay Kumar Pradhan", email = "bpradhan.asli@gmail.com"}

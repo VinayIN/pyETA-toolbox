@@ -29,7 +29,7 @@ While commercial solutions like Tobii Pro Lab offer comprehensive analysis capab
 
 # Statement of Need
 
-Modern eye tracking research requires sophisticated tools that can reliably detect fixations, saccades, and other eye movement metrics in real-time. While proprietary solutions exist, they often lack flexibility, transparency, or affordability for many research contexts. The pyETA toolbox addresses these limitations by providing an open-source alternative with advanced processing capabilities.
+Modern eye tracking research requires mostly proprietary tools that can reliably detect fixations, saccades, and other eye movement metrics in real-time. These proprietary solutions exist, one being `tobii Pro Lab`[@tobii] and there's an opensource implementation by `PsychoPy`, still they often lack flexibility, transparency, or easy installation for many research contexts. The pyETA toolbox addresses these limitations by providing an open-source alternative with advanced processing capabilities in different modes through CLI and GUI options.
 
 Several gaps in existing solutions motivated the development of pyETA:
 
@@ -39,17 +39,15 @@ Several gaps in existing solutions motivated the development of pyETA:
 
 3. Few open-source tools offer comprehensive validation tools to evaluate the quality of eye tracker calibration before proceeding with data collection.
 
-4. Web-based interfaces for eye tracking analysis (used in earlier versions of this toolbox) have proven problematic for experimental use due to inconsistent connections with hardware, high resource consumption, and display resolution inconsistencies.
+4. Web-based interfaces for eye tracking analysis (used in earlier versions of this toolbox, `v0.0.7`) have proven problematic for experimental use due to inconsistent connections with hardware, high resource consumption, and display resolution inconsistencies.
 
-The pyETA toolbox specifically addresses these challenges through its PyQt6-based implementation, which offers better hardware integration, multi-monitor support, and computational efficiency compared to web-based alternatives. The software is designed for researchers in psychology, neuroscience, and human-computer interaction who need reliable eye tracking metrics for their experiments, particularly those involving passive brain-computer interfaces [@zander2010combining] or requiring precise fixation identification [@salvucci2000identifying].
+The pyETA toolbox specifically addresses these challenges through its PyQt6-based implementation, which offers better hardware integration, multi-monitor support, and computational efficiency. The software is designed for researchers in psychology, neuroscience, and human-computer interaction who need reliable eye tracking metrics for their experiments, particularly those involving passive brain-computer interfaces [@zander2010combining] or requiring precise fixation identification [@salvucci2000identifying].
 
 # Implementation and Architecture
 
 The pyETA toolbox is implemented as a Python package with a modular architecture consisting of several key components:
 
-## Core Components
-
-1. **Data Collection Module**: Interfaces with Tobii eye trackers through the `tobii_research` library to collect raw gaze data, pupil diameter, and other metrics at specified sampling rates. The Streams process the eye tracking data through Lab Streaming Layer (LSL), facilitating real-time integration with other experimental software and data collection systems.
+1. **Data Collection Module**: Interfaces with Tobii eye trackers through the `tobii_research` library to collect raw gaze data, pupil diameter, and other metrics at specified sampling rates. The Streams process the eye tracking data through Lab Streaming Layer (LSL)[@pylsl_2023_sccnlabstreaminglayer], facilitating real-time integration with other experimental software and data collection systems.
 
 2. **Fixation Detection Algorithm**: Implements a velocity-based classifier (I-VT) for identifying fixation and saccade events. The algorithm uses the OneEuroFilter [@casiez20121] to smooth raw gaze data and calculate eye movement velocities, classifying eye movements as fixations when velocity falls below a predefined threshold.
 
@@ -57,15 +55,13 @@ The pyETA toolbox is implemented as a Python package with a modular architecture
 
 4. **Validation Tool**: Presents a grid of visual targets to assess eye tracker accuracy and precision by comparing known target positions with recorded gaze data, generating comprehensive performance metrics.
 
-## Data Processing Pipeline
-
 Raw gaze data undergoes a multi-stage processing pipeline:
 
 1. Initial data collection from the eye tracker hardware
 2. Signal filtering through the OneEuroFilter for noise reduction
 3. Velocity calculation and threshold-based classification of fixations and saccades
 4. Real-time visualization of processed data
-5. Optional streaming to LSL for integration with other experimental software
+5. Optional streaming to LSL as `tobii_gaze_fixation` for integration with other experimental software
 
 ## Output Channels
 
@@ -101,7 +97,7 @@ The toolbox generates a 22-channel data stream, providing comprehensive metrics 
 
 This comprehensive data stream allows researchers to perform detailed analyses of visual attention patterns while maintaining temporal precision. The inclusion of both raw and filtered gaze coordinates, along with fixation status and timing information, makes the toolbox particularly valuable for research paradigms requiring precise identification of when and where visual attention is deployed.
 
-# User Interface
+# Graphical User Interface
 
 The interface is developed using the PyQt6 framework and represents a transition from an earlier implementation based on the Dash framework. This change constitutes a significant improvement in the toolbox's usability and reliability. The architectural modification was motivated by several limitations encountered in collaboration with researchers from the Chair for "Neuroadaptive Human-Computer Interaction" at Brandenburg University of Technology Cottbus-Senftenberg, Germany:
 
@@ -117,36 +113,13 @@ The PyQt6 implementation addresses these issues through:
   
 - **Efficient Resource Usage**: Native Qt rendering reduces CPU and memory overhead by 40-60% compared to browser-based visualization, particularly important for real-time applications where consistent frame rates are critical for accurate timestamps.
   
-- **Enhanced Screen Management**: PyQt6's QScreen and QWindow classes provide programmatic access to display properties, allowing precise control over which screen displays the validation targets versus the control interface. This multi-monitor management is implemented through Qt's screen() and screenAt() methods.
+- **Enhanced Screen Management**: PyQt6's screen management provide programmatic access to display properties, allowing precise control over which screen displays the validation targets versus the control interface.
   
 - **Consistent Display Scaling**: Better management of screen resolution differences through PyQt6's device pixel ratio handling, ensuring accurate spatial representation of eye tracking data across different display configurations, critical for precise mapping of gaze coordinates.
 
 The pyETA application uses PyQt6's threading support (QThread) to separate the UI thread from data acquisition, ensuring the interface remains responsive even during high-frequency data collection (up to 600Hz with Tobii Pro Spectrum).
 
 ![pyETA User Interface](figures/new-gui.png)
-
-
-## Command-Line Interface
-
-For real-time tracking with fixation detection using a mock service (for testing):
-
-```bash
-pyETA track --fixation --use_mock --duration 10
-```
-
-For validation window display:
-
-```bash
-pyETA window --use_mock --screen_index=0
-```
-
-For validation metrics calculation:
-
-```bash
-pyETA validate --csv=metrics.csv
-```
-
-## Graphical Interface
 
 The PyQt6 application can be launched with:
 
@@ -165,7 +138,7 @@ This opens the main interface, allowing users to:
 
 Alternatively, the graphical interface can be built for Windows and macOS systems for distribution using the `pyETA exe` command.
 
-### Interface Components
+## Interface Components
 
 The current interface provides researchers with real-time visualization of gaze patterns, fixation events, and validation metrics through an intuitive tab-based design. The application maintains separate views for:
 
@@ -176,23 +149,44 @@ The current interface provides researchers with real-time visualization of gaze 
 
 This comprehensive interface allows researchers to efficiently set up experiments, monitor data quality in real-time, and validate system performance—all within a single integrated environment. Keyboard shortcuts implemented through QShortcut enhance accessibility and operational efficiency.
 
+
+# Command-Line Interface
+
+- For real-time tracking with fixation detection using a mock service (for testing):
+
+```bash
+pyETA track --fixation --use_mock --duration 10
+```
+
+- For validation window display:
+
+```bash
+pyETA window --use_mock --screen_index=0
+```
+
+- For validation metrics calculation:
+
+```bash
+pyETA validate --csv=metrics.csv
+```
+
 # Community Guidelines
 
 ## Installation
 
-The pyETA toolbox can be installed directly from PyPI:
+- The pyETA toolbox can be installed directly from PyPI:
 
 ```bash
 pip install pyETA-toolbox
 ```
 
-Alternatively, the latest development version can be installed from GitHub:
+- Alternatively, the latest development version can be installed from GitHub:
 
 ```bash
 pip install git+https://github.com/VinayIN/pyETA-toolbox.git
 ```
 
-For users who prefer pre-built packages, platform-specific wheel files are available:
+- For users who prefer pre-built packages, platform-specific wheel files are available:
 ```bash
 pip install pyeta-toolbox-<version>-py3-none-any.whl
 ```
@@ -200,12 +194,13 @@ pip install pyeta-toolbox-<version>-py3-none-any.whl
 ## Dependencies
 
 The toolbox requires the following major dependencies:
+
 - Python 3.10.*
 - PyQt6
 - NumPy
 - pandas
 - matplotlib
-- tobii_research
+- tobii_research (1.11.0 is tested for this package)
 - pylsl (Lab Streaming Layer)
 - mne_lsl (1.6.0 or later for advanced LSL integration)
 
