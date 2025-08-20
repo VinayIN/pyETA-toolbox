@@ -1,9 +1,10 @@
 [build-system]
-requires = [
-    "setuptools==78.1.0",
-    "setuptools_scm==8.2.0",
-]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.8.12,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "pyETA"
+module-root = ""
 
 [project]
 name = "pyETA-toolbox"
@@ -13,7 +14,8 @@ authors = [
     {name = "Binay Kumar Pradhan", email = "bpradhan.asli@gmail.com"}
 ]
 readme = "README.md"
-license = { text = "GPL-3.0" }
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 
 keywords = ["eyetracker", "tobii", "mock tobii", "passiveBCI", "real-time eye tracking", "tobii-research"]
 requires-python = "==3.10.*"
@@ -26,16 +28,15 @@ dependencies = [
     "pyqt6 >=6.8.0",
     "pynput >=1.7.7",
     "click >=8.1.8",
-    #"tobii-research ==1.11.0"
+    "tobii-research ==1.11.0"
 ]
 
-# Development dependencies
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-    "pytest >= 8.3.3",
-    "ipython >= 8.31.0",
-    "pytest-asyncio >= 0.24.0",
-    "briefcase >= 0.3.16"
+    "briefcase>=0.3.24",
+    "ipython>=8.37.0",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
 ]
 
 [project.urls]
